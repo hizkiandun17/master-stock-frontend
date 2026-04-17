@@ -38,6 +38,7 @@ export interface Product {
 
 export interface ProductionPlanItem {
   productId: string;
+  plannedQty: number;
   quantity: number;
 }
 

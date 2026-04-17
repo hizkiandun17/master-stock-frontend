@@ -42,6 +42,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const { batches, products, categories, updateBatch, completeBatch } = useMasterStock();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const pendingFocusProductId = useRef<string | null>(null);
   const plannedInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -88,6 +89,18 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const completedLabel = batch.completedAt
     ? `Completed ${formatDateTime(batch.completedAt)}`
     : "Completed -";
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const visibleItems =
+    batch.status === "in_progress" && normalizedSearchQuery
+      ? batch.items.filter((item) => {
+          const product = products.find((entry) => entry.id === item.productId);
+          if (!product) return false;
+
+          return [product.name, product.sku]
+            .filter(Boolean)
+            .some((value) => value.toLowerCase().includes(normalizedSearchQuery));
+        })
+      : batch.items;
 
   function replaceItems(nextItems: BatchLine[]) {
     updateBatch(activeBatch.id, { items: nextItems });
@@ -139,7 +152,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   }
 
   return (
-      <MasterStockShell currentPath="batches">
+    <MasterStockShell currentPath="batches">
       <section className="space-y-8 pb-24 md:pb-0">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3">
@@ -264,20 +277,34 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
               </div>
             ) : (
               <div className="space-y-2">
-                {batch.items.map((item) => {
-                  const product = products.find((entry) => entry.id === item.productId);
-                  if (!product) return null;
+                {batch.status === "in_progress" ? (
+                  <Input
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search items in this batch..."
+                    className="h-11"
+                    aria-label="Search items in this batch"
+                  />
+                ) : null}
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={cn(
-                        "flex flex-col gap-4 rounded-2xl border px-4 py-4",
-                        item.checked ? "border-white/20 bg-white/[0.03]" : "border-white/10",
-                      )}
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div className="flex min-w-0 items-start gap-3">
+                {visibleItems.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                    No matching items in this batch.
+                  </div>
+                ) : (
+                  visibleItems.map((item) => {
+                    const product = products.find((entry) => entry.id === item.productId);
+                    if (!product) return null;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          "flex items-start justify-between gap-3 rounded-2xl border px-4 py-4",
+                          item.checked ? "border-white/20 bg-white/[0.03]" : "border-white/10",
+                        )}
+                      >
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
                           <Checkbox
                             aria-label={`Mark ${product.name} checked`}
                             checked={item.checked}
@@ -289,83 +316,80 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                           />
                           <div className="min-w-0">
                             <p className="text-sm font-medium text-foreground">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {product.sku} · {getCategoryName(product.categoryId, categories)}
-                            </p>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Planned {item.plannedQty} pcs
-                            </p>
+                            <p className="text-xs text-muted-foreground">{product.sku}</p>
                           </div>
                         </div>
 
-                        {editable ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => removeItem(item.productId)}
-                            className="min-h-11 w-full sm:w-auto"
-                            aria-label={`Remove ${product.name}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        ) : null}
-                      </div>
+                        <div className="flex shrink-0 items-start gap-2">
+                          <label className="w-[116px] space-y-2 text-right text-sm sm:w-[136px]">
+                            <span className="block text-xs text-muted-foreground">
+                              Planned: {item.plannedQty} pcs
+                            </span>
+                            <Input
+                              ref={(node) => {
+                                plannedInputRefs.current.set(item.productId, node);
+                                if (pendingFocusProductId.current === item.productId && node) {
+                                  window.requestAnimationFrame(() => {
+                                    node.focus();
+                                    node.select();
+                                    pendingFocusProductId.current = null;
+                                  });
+                                }
+                              }}
+                              type="number"
+                              min="0"
+                              inputMode="numeric"
+                              value={String(item.receivedQty)}
+                              onChange={(event) =>
+                                updateItem(item.productId, {
+                                  receivedQty: Number(event.target.value) || 0,
+                                })
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") {
+                                  return;
+                                }
 
-                      <div className="grid gap-4 md:grid-cols-[minmax(0,220px)]">
-                        <label className="space-y-2 text-sm">
-                          <span className="text-muted-foreground">Quantity</span>
-                          <Input
-                            ref={(node) => {
-                              plannedInputRefs.current.set(item.productId, node);
-                              if (pendingFocusProductId.current === item.productId && node) {
+                                event.preventDefault();
+                                const currentIndex = visibleItems.findIndex(
+                                  (entry) => entry.productId === item.productId,
+                                );
+                                const nextItem = visibleItems[currentIndex + 1];
+                                if (!nextItem) {
+                                  return;
+                                }
+
+                                const nextInput = plannedInputRefs.current.get(nextItem.productId);
+                                if (!nextInput) {
+                                  return;
+                                }
+
                                 window.requestAnimationFrame(() => {
-                                  node.focus();
-                                  node.select();
-                                  pendingFocusProductId.current = null;
+                                  nextInput.focus();
+                                  nextInput.select();
                                 });
-                              }
-                            }}
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            value={String(item.receivedQty)}
-                            onChange={(event) =>
-                              updateItem(item.productId, {
-                                receivedQty: Number(event.target.value) || 0,
-                              })
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key !== "Enter") {
-                                return;
-                              }
+                              }}
+                              className="h-12 text-base"
+                              disabled={!editable}
+                            />
+                          </label>
 
-                              event.preventDefault();
-                              const currentIndex = activeBatch.items.findIndex(
-                                (entry) => entry.productId === item.productId,
-                              );
-                              const nextItem = activeBatch.items[currentIndex + 1];
-                              if (!nextItem) {
-                                return;
-                              }
-
-                              const nextInput = plannedInputRefs.current.get(nextItem.productId);
-                              if (!nextInput) {
-                                return;
-                              }
-
-                              window.requestAnimationFrame(() => {
-                                nextInput.focus();
-                                nextInput.select();
-                              });
-                            }}
-                            className="h-12 text-base"
-                            disabled={!editable}
-                          />
-                        </label>
+                          {editable ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => removeItem(item.productId)}
+                              className="min-h-12 px-3"
+                              aria-label={`Remove ${product.name}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             )}
           </CardContent>

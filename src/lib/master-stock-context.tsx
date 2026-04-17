@@ -265,6 +265,7 @@ function normalizeProductionPlans(input: ProductionPlan[]): ProductionPlan[] {
     items: Array.isArray(plan.items)
       ? plan.items.map((item) => ({
           productId: item.productId,
+          plannedQty: Math.max(0, item.plannedQty ?? item.quantity),
           quantity: Math.max(0, item.quantity),
         }))
       : [],
@@ -620,6 +621,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     (input: CreateProductionPlanInput) => {
       const normalizedItems = (input.items ?? []).map((item) => ({
         productId: item.productId,
+        plannedQty: Math.max(0, item.plannedQty ?? item.quantity),
         quantity: Math.max(0, item.quantity),
       }));
       const createdAt = new Date().toISOString();
@@ -682,6 +684,12 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
           const normalizedItems: ProductionPlanItem[] | undefined = items?.map((item) => ({
             productId: item.productId,
+            plannedQty: Math.max(
+              0,
+              item.plannedQty ??
+                plan.items.find((existingItem) => existingItem.productId === item.productId)?.plannedQty ??
+                item.quantity,
+            ),
             quantity: Math.max(0, item.quantity),
           }));
           const historyEntries = [...plan.history];

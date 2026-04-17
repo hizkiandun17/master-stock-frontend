@@ -13,7 +13,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useMasterStock } from "@/lib/master-stock-context";
 import { exportSingleProductionPlanPdf } from "@/lib/pdf-export";
-import { getCategoryName } from "@/lib/stock-helpers";
 import type { ProductionPlanItem } from "@/lib/types";
 import { cn, formatDate, formatDateTime, titleCase } from "@/lib/utils";
 
@@ -107,7 +106,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   function addProduct(productId: string) {
-    replaceItems([...planItems, { productId, quantity: 0 }]);
+    replaceItems([...planItems, { productId, plannedQty: 0, quantity: 0 }]);
     setPendingFocusProductId(productId);
   }
 
@@ -258,24 +257,15 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                   return (
                     <div
                       key={item.productId}
-                      className="flex flex-col gap-4 rounded-2xl border border-white/10 px-4 py-4"
+                      className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 px-4 py-4"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground">{product.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {product.sku} · {getCategoryName(product.categoryId, safeCategories)}
-                          </p>
-                        </div>
-                        <label className="space-y-2 text-sm">
-                          <span className="text-muted-foreground">Planned quantity</span>
-                          <p className="text-sm font-medium text-foreground">{item.quantity} pcs</p>
-                        </label>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">{product.sku}</p>
                       </div>
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                        <label className="space-y-2 text-sm">
-                          <span className="text-muted-foreground">Quantity</span>
+                      <div className="flex shrink-0 items-start gap-2">
+                        <label className="w-[116px] text-right text-sm sm:w-[136px]">
                           <Input
                             type="number"
                             min="0"
@@ -300,7 +290,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                           <Button
                             variant="outline"
                             onClick={() => removeProduct(item.productId)}
-                            className="min-h-12 w-full sm:w-auto"
+                            className="min-h-12 px-3"
                             aria-label={`Remove ${product.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
