@@ -77,13 +77,13 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4 sm:p-6 animate-[dialog-overlay-in_160ms_ease-out]"
+      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/50 p-0 md:items-center md:p-6 animate-[dialog-overlay-in_160ms_ease-out]"
       onClick={() => onOpenChange(false)}
       data-testid="dialog-overlay"
     >
       <div
         className={cn(
-          "relative max-h-[90vh] w-full max-w-[560px] overflow-hidden rounded-[24px] border border-border bg-card shadow-[0_24px_90px_rgba(0,0,0,0.5)] animate-[dialog-content-in_180ms_ease-out]",
+          "relative flex h-full w-full flex-col overflow-hidden rounded-none border-0 border-border bg-card shadow-[0_24px_90px_rgba(0,0,0,0.5)] animate-[dialog-content-in_180ms_ease-out] md:h-auto md:max-h-[90vh] md:max-w-[560px] md:rounded-[24px] md:border",
           className,
         )}
         onClick={(event) => event.stopPropagation()}
@@ -94,7 +94,7 @@ export function Dialog({
       >
         <div
           className={cn(
-            "flex items-start justify-between border-b border-border px-6 py-5",
+            "flex items-start justify-between border-b border-border px-4 py-4 md:px-6 md:py-5",
             headerClassName,
           )}
         >
@@ -117,19 +117,22 @@ export function Dialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="rounded-md p-2.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             aria-label="Close dialog"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         <div
-          className={cn("max-h-[calc(90vh-180px)] overflow-y-auto px-6 py-5", bodyClassName)}
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto px-4 py-4 md:max-h-[calc(90vh-180px)] md:px-6 md:py-5",
+            bodyClassName,
+          )}
         >
           {children}
         </div>
         {footer ? (
-          <div className="border-t border-border px-6 py-4">{footer}</div>
+          <div className="border-t border-border px-4 py-4 md:px-6">{footer}</div>
         ) : null}
       </div>
     </div>,

@@ -29,8 +29,8 @@ export function MasterStockShell({
     <div className="min-h-screen bg-background text-foreground">
       <div className="absolute inset-0 -z-10 bg-grid-dark bg-[size:72px_72px] opacity-[0.035]" />
       <header className="border-b border-border/90 bg-background/94 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-8">
+        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-4 px-4 py-4 md:px-6">
+          <div className="flex min-w-0 items-center gap-4 md:gap-8">
             <Link href="/master-stock" className="text-base font-semibold tracking-[0.2em] text-white/90">
               O-SHE
             </Link>
@@ -58,12 +58,12 @@ export function MasterStockShell({
               </Link>
             </nav>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex w-full items-center gap-3 sm:w-auto">
             <Select
               aria-label="Current role"
               value={currentUserRole}
               onChange={(event) => setCurrentUserRole(event.target.value as UserRole)}
-              className="w-[170px] rounded-full border-border bg-secondary text-xs uppercase tracking-[0.14em]"
+              className="h-11 w-full rounded-full border-border bg-secondary text-xs uppercase tracking-[0.14em] sm:w-[170px]"
             >
               <option value="owner">Owner</option>
               <option value="admin">Admin</option>
@@ -79,7 +79,7 @@ export function MasterStockShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1400px] px-6 py-8 md:py-10">{children}</main>
+      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6 md:py-10">{children}</main>
     </div>
   );
 }

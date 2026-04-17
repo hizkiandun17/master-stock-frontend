@@ -151,21 +151,21 @@ export function ManageCategoriesDialog({
       }}
       title="Manage Categories"
       description="Organize and manage your product collections"
-      className="max-w-3xl border-white/10 bg-[#09090b]"
-      headerClassName="border-b-0 px-6 pb-2 pt-6"
-      bodyClassName="px-6 pb-6 pt-1"
-      titleClassName="text-[30px] font-semibold leading-tight tracking-tight"
+      className="border-white/10 bg-[#09090b] md:max-w-3xl"
+      headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
+      bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
+      titleClassName="text-[24px] font-semibold leading-tight tracking-tight md:text-[30px]"
       descriptionClassName="text-sm text-muted-foreground"
       footer={
         <div className="flex justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="min-h-11 w-full sm:w-auto">
             Close
           </Button>
         </div>
       }
     >
       <div className="space-y-5">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"
@@ -174,6 +174,7 @@ export function ManageCategoriesDialog({
               setEditingCategoryId(null);
               setError("");
             }}
+            className="min-h-11 w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Add New Category

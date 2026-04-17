@@ -11,7 +11,7 @@ import {
   PencilLine,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { CategorySelectField } from "@/components/master-stock/category-select-field";
 import { ManageCategoriesDialog } from "@/components/master-stock/manage-categories-dialog";
@@ -66,6 +66,18 @@ interface EditStockDraft {
   sku: string;
   consignmentPrice: string;
   wholesalePrice: string;
+}
+
+interface StockActionMenuProps {
+  product: Product;
+  open: boolean;
+  onToggle: () => void;
+  actionMenuRef?: RefObject<HTMLDivElement | null>;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onArchive: () => void;
+  onHistory: () => void;
 }
 
 function hashString(value: string) {
@@ -224,6 +236,95 @@ function downloadCsv(filename: string, rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
+function useMobileViewport() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const updateViewport = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+
+    return () => window.removeEventListener("resize", updateViewport);
+  }, []);
+
+  return isMobile;
+}
+
+function StockActionMenu({
+  product,
+  open,
+  onToggle,
+  actionMenuRef,
+  onView,
+  onEdit,
+  onDelete,
+  onArchive,
+  onHistory,
+}: StockActionMenuProps) {
+  return (
+    <div ref={open ? actionMenuRef : null} className="relative flex justify-end">
+      <button
+        type="button"
+        aria-label={`Open actions for ${product.name}`}
+        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        onClick={onToggle}
+      >
+        <MoreHorizontal className="h-5 w-5" />
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-12 z-30 w-56 rounded-2xl border border-white/10 bg-[#0b0b0f] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <p className="px-3 py-2 text-sm font-medium text-foreground">Actions</p>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            onClick={onView}
+          >
+            <Eye className="h-4 w-4 text-muted-foreground" />
+            View Details &amp; QR
+          </button>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            onClick={onEdit}
+          >
+            <PencilLine className="h-4 w-4 text-muted-foreground" />
+            Edit Stock
+          </button>
+          <div className="my-2 border-t border-border/80" />
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            onClick={onArchive}
+          >
+            <Archive className="h-4 w-4 text-muted-foreground" />
+            Archive Stock
+          </button>
+          <button
+            type="button"
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            onClick={onHistory}
+          >
+            <History className="h-4 w-4 text-muted-foreground" />
+            View History
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function OverviewPage() {
   const {
     products,
@@ -246,6 +347,7 @@ export function OverviewPage() {
   const [categoryId, setCategoryId] = useState("all");
   const [page, setPage] = useState(1);
   const previousRowsPerPage = useRef(preferences.rowsPerPage);
+  const isMobileViewport = useMobileViewport();
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
@@ -607,11 +709,11 @@ export function OverviewPage() {
 
   return (
     <MasterStockShell currentPath="overview">
-      <section className="space-y-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <section className="space-y-5 md:space-y-6">
+        <div className="flex flex-col gap-4 md:gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-3">
-            <h1 className="text-3xl font-semibold tracking-tight">Stocks</h1>
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Stocks</h1>
+            <div className="inline-flex w-full items-center gap-2 rounded-full border border-border bg-secondary px-3 py-2 text-xs text-muted-foreground sm:w-auto">
               <Clock3 className="h-3.5 w-3.5" />
               {isStale
                 ? `Data may be stale. Last synced ${formatRelativeTime(lastSyncedAt)}`
@@ -619,16 +721,16 @@ export function OverviewPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={exportFiltered}>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button variant="outline" onClick={exportFiltered} className="min-h-11 w-full sm:w-auto">
               <Download className="mr-2 h-4 w-4" />
               Export Short
             </Button>
-            <Button variant="outline" onClick={exportProductionTeam}>
+            <Button variant="outline" onClick={exportProductionTeam} className="min-h-11 w-full sm:w-auto">
               <Download className="mr-2 h-4 w-4" />
               Export Production Team
             </Button>
-            <Button onClick={openCreateModal}>
+            <Button onClick={openCreateModal} className="min-h-11 w-full sm:w-auto">
               <PackagePlus className="mr-2 h-4 w-4" />
               Add New Stock
             </Button>
@@ -671,7 +773,8 @@ export function OverviewPage() {
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+          <div className="flex min-w-full gap-3 md:grid md:grid-cols-2 xl:grid-cols-5">
           {summaryCards.map((card) => (
             <div
               key={card.id}
@@ -681,7 +784,7 @@ export function OverviewPage() {
                   : undefined
               }
               className={cn(
-                "rounded-[18px] border px-4 py-4 text-left",
+                "min-w-[140px] shrink-0 rounded-[18px] border px-4 py-4 text-left md:min-w-0",
                 card.interactive
                   ? "cursor-pointer bg-card transition-all duration-150 hover:-translate-y-1 hover:border-zinc-600 hover:bg-white/[0.03] active:scale-[0.98]"
                   : "bg-zinc-950/70 border-zinc-900/80",
@@ -742,12 +845,13 @@ export function OverviewPage() {
               ) : null}
             </div>
           ))}
+          </div>
         </div>
 
         <Card className="overflow-hidden border-white/10">
           <CardContent className="space-y-5 p-0">
-            <div className="flex flex-col gap-3 border-b border-border/80 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="grid flex-1 gap-3 lg:grid-cols-[minmax(280px,1fr),220px,auto]">
+            <div className="flex flex-col gap-3 border-b border-border/80 px-4 py-4 md:px-5 lg:flex-row lg:items-center lg:justify-between">
+              <div className="grid flex-1 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(280px,1fr),220px,auto]">
                 <div className="relative">
                   <Input
                     value={search}
@@ -771,7 +875,7 @@ export function OverviewPage() {
                     ))}
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Button
                     variant={preferences.stockView === "projected" ? "secondary" : "outline"}
                     onClick={() =>
@@ -779,6 +883,7 @@ export function OverviewPage() {
                         preferences.stockView === "projected" ? "current" : "projected",
                       )
                     }
+                    className="min-h-11 w-full sm:w-auto"
                   >
                     {preferences.stockView === "projected"
                       ? "Projected On"
@@ -789,7 +894,89 @@ export function OverviewPage() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {isMobileViewport ? (
+              <div className="space-y-3 px-4 pb-1 md:hidden">
+                {paginatedProducts.length === 0 ? (
+                  <div className="rounded-[20px] border border-border/70 bg-card px-4 py-12 text-center text-sm text-muted-foreground">
+                    No products match this filter.
+                  </div>
+                ) : (
+                  paginatedProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      className="rounded-[20px] border border-white/10 bg-card p-4"
+                      onClick={() => setSelectedProduct(product)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedProduct(product);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="line-clamp-2 text-base font-medium leading-snug text-foreground">
+                            {product.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">{product.sku}</p>
+                        </div>
+                        <div onClick={stopRowClick}>
+                          <StockActionMenu
+                            product={product}
+                            open={openActionMenuId === product.id}
+                            onToggle={() =>
+                              setOpenActionMenuId((current) =>
+                                current === product.id ? null : product.id,
+                              )
+                            }
+                            actionMenuRef={actionMenuRef}
+                            onView={() => {
+                              setOpenActionMenuId(null);
+                              setSelectedProduct(product);
+                            }}
+                            onEdit={() => openEditStock(product)}
+                            onDelete={() => handleDelete(product)}
+                            onArchive={() => handleArchive(product)}
+                            onHistory={() => handleViewHistory(product)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">Category</span>
+                          <span className="max-w-[65%] text-right text-foreground">
+                            {getCategoryName(product.categoryId, sortedCategories)}
+                          </span>
+                        </div>
+                        <div className="rounded-2xl bg-white/[0.03] px-3 py-3">
+                          <p className="text-sm font-medium text-foreground">
+                            In Stock: {product.currentStock.warehouse}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Indira: {product.currentStock.indira} | Mita: {product.currentStock.mita}
+                          </p>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Total: {getProductTotal(product)}
+                          </p>
+                          {preferences.stockView === "projected" &&
+                          product.plannedQuantity > 0 ? (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              +{product.plannedQuantity} projected
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+
+            {!isMobileViewport ? (
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full divide-y divide-border text-sm">
                 <thead className="text-left text-xs text-muted-foreground">
                   <tr>
@@ -851,75 +1038,24 @@ export function OverviewPage() {
                           </div>
                         </td>
                         <td className="relative px-4 py-4 align-top" onClick={stopRowClick}>
-                          <div
-                            ref={openActionMenuId === product.id ? actionMenuRef : null}
-                            className="flex justify-end"
-                          >
-                            <button
-                              type="button"
-                              aria-label={`Open actions for ${product.name}`}
-                              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                              onClick={() =>
-                                setOpenActionMenuId((current) =>
-                                  current === product.id ? null : product.id,
-                                )
-                              }
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-
-                            {openActionMenuId === product.id ? (
-                              <div className="absolute right-4 top-12 z-30 w-56 rounded-2xl border border-white/10 bg-[#0b0b0f] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-                                <p className="px-3 py-2 text-sm font-medium text-foreground">
-                                  Actions
-                                </p>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
-                                  onClick={() => {
-                                    setOpenActionMenuId(null);
-                                    setSelectedProduct(product);
-                                  }}
-                                >
-                                  <Eye className="h-4 w-4 text-muted-foreground" />
-                                  View Details &amp; QR
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
-                                  onClick={() => openEditStock(product)}
-                                >
-                                  <PencilLine className="h-4 w-4 text-muted-foreground" />
-                                  Edit Stock
-                                </button>
-                                <div className="my-2 border-t border-border/80" />
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-danger transition-colors hover:bg-danger/10"
-                                  onClick={() => handleDelete(product)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                  Delete
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
-                                  onClick={() => handleArchive(product)}
-                                >
-                                  <Archive className="h-4 w-4 text-muted-foreground" />
-                                  Archive Stock
-                                </button>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-accent"
-                                  onClick={() => handleViewHistory(product)}
-                                >
-                                  <History className="h-4 w-4 text-muted-foreground" />
-                                  View History
-                                </button>
-                              </div>
-                            ) : null}
-                          </div>
+                          <StockActionMenu
+                            product={product}
+                            open={openActionMenuId === product.id}
+                            onToggle={() =>
+                              setOpenActionMenuId((current) =>
+                                current === product.id ? null : product.id,
+                              )
+                            }
+                            actionMenuRef={actionMenuRef}
+                            onView={() => {
+                              setOpenActionMenuId(null);
+                              setSelectedProduct(product);
+                            }}
+                            onEdit={() => openEditStock(product)}
+                            onDelete={() => handleDelete(product)}
+                            onArchive={() => handleArchive(product)}
+                            onHistory={() => handleViewHistory(product)}
+                          />
                         </td>
                       </tr>
                     ))
@@ -927,28 +1063,30 @@ export function OverviewPage() {
                 </tbody>
               </table>
             </div>
+            ) : null}
 
-            <div className="flex flex-col gap-3 border-t border-border/80 px-5 py-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex flex-col gap-3 border-t border-border/80 px-4 py-4 md:flex-row md:items-center md:justify-between md:px-5">
+              <div className="flex flex-col gap-3 text-sm text-muted-foreground sm:flex-row sm:items-center">
                 <span>
                   Page {page} of {totalPages}
                 </span>
                 <Select
                   value={String(preferences.rowsPerPage)}
                   onChange={(event) => setRowsPerPage(Number(event.target.value))}
-                  className="h-9 w-[128px]"
+                  className="h-11 w-full sm:w-[128px]"
                 >
                   <option value="10">10 rows</option>
                   <option value="25">25 rows</option>
                   <option value="50">50 rows</option>
                 </Select>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => setPage((current) => Math.max(1, current - 1))}
                   disabled={page === 1}
+                  className="min-h-11 w-full sm:w-auto"
                 >
                   Previous
                 </Button>
@@ -957,6 +1095,7 @@ export function OverviewPage() {
                   variant="outline"
                   onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
                   disabled={page === totalPages}
+                  className="min-h-11 w-full sm:w-auto"
                 >
                   Next
                 </Button>
@@ -971,14 +1110,14 @@ export function OverviewPage() {
         onOpenChange={(open) => !open && setSelectedProduct(null)}
         title={selectedProduct?.name ?? "Product details"}
         description={selectedProduct ? `SKU: ${selectedProduct.sku}` : undefined}
-        className="max-w-4xl border-white/10 bg-[#09090b]"
-        headerClassName="border-b-0 px-6 pb-2 pt-6"
-        bodyClassName="px-6 pb-6 pt-1"
-        titleClassName="text-[30px] font-semibold leading-tight tracking-tight"
+        className="border-white/10 bg-[#09090b] md:max-w-4xl"
+        headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
+        bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
+        titleClassName="text-[24px] font-semibold leading-tight tracking-tight md:text-[30px]"
         descriptionClassName="text-sm text-muted-foreground"
       >
         {selectedProduct ? (
-          <div className="grid gap-8 lg:grid-cols-[320px,1fr]">
+          <div className="grid gap-6 md:gap-8 lg:grid-cols-[320px,1fr]">
             <div className="space-y-5">
               <ProductPreview product={selectedProduct} />
               <div className="rounded-[22px] bg-white/[0.03] px-5 py-6">
@@ -1091,23 +1230,24 @@ export function OverviewPage() {
             ? `Update prices for "${selectedEditProduct.name}".`
             : "Update stock prices."
         }
-        className="max-w-3xl border-white/10 bg-[#09090b]"
-        headerClassName="border-b-0 px-6 pb-2 pt-6"
-        bodyClassName="px-6 pb-6 pt-1"
-        titleClassName="text-[30px] font-semibold leading-tight tracking-tight"
+        className="border-white/10 bg-[#09090b] md:max-w-3xl"
+        headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
+        bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
+        titleClassName="text-[24px] font-semibold leading-tight tracking-tight md:text-[30px]"
         descriptionClassName="text-sm text-muted-foreground"
         footer={
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
               onClick={() => {
                 setIsEditModalOpen(false);
                 setSelectedEditProduct(null);
               }}
+              className="min-h-11 w-full sm:w-auto"
             >
               Cancel
             </Button>
-            <Button onClick={submitEditStock}>
+            <Button onClick={submitEditStock} className="min-h-11 w-full sm:w-auto">
               Update Stock
             </Button>
           </div>
@@ -1251,14 +1391,14 @@ export function OverviewPage() {
         }}
         title="Create New Stock Item"
         description="Enter the details for the new stock item. Inventory counts start at zero."
-        className="max-w-3xl border-white/10 bg-[#09090b]"
-        headerClassName="border-b-0 px-6 pb-2 pt-6"
-        bodyClassName="px-6 pb-6 pt-1"
-        titleClassName="text-[30px] font-semibold leading-tight tracking-tight"
+        className="border-white/10 bg-[#09090b] md:max-w-3xl"
+        headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
+        bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
+        titleClassName="text-[24px] font-semibold leading-tight tracking-tight md:text-[30px]"
         descriptionClassName="text-sm text-muted-foreground"
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={closeCreateModal}>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="outline" onClick={closeCreateModal} className="min-h-11 w-full sm:w-auto">
               Cancel
             </Button>
             <Button
@@ -1268,6 +1408,7 @@ export function OverviewPage() {
                 !createStockDraft.sku ||
                 !createStockDraft.categoryId
               }
+              className="min-h-11 w-full sm:w-auto"
             >
               Create Stock Item
             </Button>
