@@ -1,12 +1,15 @@
 "use client";
 import {
   Archive,
+  ChevronDown,
   Clock3,
   Download,
   Eye,
   Filter,
+  FileText,
   History,
   MoreHorizontal,
+  Package,
   PackagePlus,
   PencilLine,
   Trash2,
@@ -19,9 +22,18 @@ import { MasterStockShell } from "@/components/master-stock/shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useMasterStock } from "@/lib/master-stock-context";
+import { exportMasterStockPdf } from "@/lib/pdf-export";
 import { getCategoryName, getProductTotal } from "@/lib/stock-helpers";
 import type { Product } from "@/lib/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
@@ -332,7 +344,6 @@ export function OverviewPage() {
     preferences,
     lastSyncedAt,
     setRowsPerPage,
-    setStockView,
     createCategory,
     createProduct,
     updateProductPricing,
@@ -406,6 +417,9 @@ export function OverviewPage() {
       }).length,
     [activeProducts],
   );
+
+  const headerDropdownTriggerClassName =
+    "inline-flex min-h-11 w-full items-center justify-center rounded-xl border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:w-auto";
 
   const summaryCards = useMemo<SummaryCard[]>(
     () => [
@@ -569,11 +583,9 @@ export function OverviewPage() {
 
   function exportFiltered() {
     downloadCsv(
-      preferences.stockView === "projected"
-        ? "stocks-projected.csv"
-        : "stocks-current.csv",
+      "stocks-current.csv",
       [
-        ["SKU", "Name", "Category", "Indira", "Mita", "In Stock", "Total", "Projected"],
+        ["SKU", "Name", "Category", "Indira", "Mita", "In Stock", "Total"],
         ...filteredProducts.map((product) => [
           product.sku,
           product.name,
@@ -582,23 +594,17 @@ export function OverviewPage() {
           String(product.currentStock.mita),
           String(product.currentStock.warehouse),
           `${getProductTotal(product)} Total`,
-          product.plannedQuantity > 0 ? `+${product.plannedQuantity} projected` : "",
         ]),
       ],
     );
   }
 
   function exportProductionTeam() {
-    downloadCsv("stocks-production-team.csv", [
-      ["SKU", "Name", "Current Total", "Projected", "Planned Note"],
-      ...filteredProducts.map((product) => [
-        product.sku,
-        product.name,
-        `${getProductTotal(product)}`,
-        product.plannedQuantity > 0 ? `+${product.plannedQuantity}` : "",
-        product.plannedNote ?? "",
-      ]),
-    ]);
+    void exportMasterStockPdf({
+      products: filteredProducts,
+      categories: sortedCategories,
+      mode: "actual",
+    });
   }
 
   function submitAddProduct() {
@@ -722,15 +728,36 @@ export function OverviewPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button variant="outline" onClick={exportFiltered} className="min-h-11 w-full sm:w-auto">
-              <Download className="mr-2 h-4 w-4" />
-              Export Short
-            </Button>
-            <Button variant="outline" onClick={exportProductionTeam} className="min-h-11 w-full sm:w-auto">
-              <Download className="mr-2 h-4 w-4" />
-              Export Production Team
-            </Button>
-            <Button onClick={openCreateModal} className="min-h-11 w-full sm:w-auto">
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Open export options"
+                className={cn(
+                  headerDropdownTriggerClassName,
+                )}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Export
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel>General</DropdownMenuLabel>
+                <DropdownMenuItem onClick={exportFiltered}>
+                  <FileText className="h-4 w-4" />
+                  Stock Summary
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Production</DropdownMenuLabel>
+                <DropdownMenuItem onClick={exportProductionTeam}>
+                  <Package className="h-4 w-4" />
+                  Production Team Report
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              onClick={openCreateModal}
+              className="min-h-11 w-full sm:w-auto"
+              aria-label="Add new stock"
+            >
               <PackagePlus className="mr-2 h-4 w-4" />
               Add New Stock
             </Button>
@@ -851,7 +878,7 @@ export function OverviewPage() {
         <Card className="overflow-hidden border-white/10">
           <CardContent className="space-y-5 p-0">
             <div className="flex flex-col gap-3 border-b border-border/80 px-4 py-4 md:px-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="grid flex-1 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(280px,1fr),220px,auto]">
+              <div className="grid flex-1 gap-3 md:grid-cols-2 lg:grid-cols-[minmax(280px,1fr),220px]">
                 <div className="relative">
                   <Input
                     value={search}
@@ -874,22 +901,6 @@ export function OverviewPage() {
                       </option>
                     ))}
                   </Select>
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <Button
-                    variant={preferences.stockView === "projected" ? "secondary" : "outline"}
-                    onClick={() =>
-                      setStockView(
-                        preferences.stockView === "projected" ? "current" : "projected",
-                      )
-                    }
-                    className="min-h-11 w-full sm:w-auto"
-                  >
-                    {preferences.stockView === "projected"
-                      ? "Projected On"
-                      : "Projected Off"}
-                  </Button>
-                  <span className="text-xs text-muted-foreground">Projection only, no stock mutation</span>
                 </div>
               </div>
             </div>
@@ -961,12 +972,6 @@ export function OverviewPage() {
                           <p className="mt-1 text-sm text-muted-foreground">
                             Total: {getProductTotal(product)}
                           </p>
-                          {preferences.stockView === "projected" &&
-                          product.plannedQuantity > 0 ? (
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              +{product.plannedQuantity} projected
-                            </p>
-                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -1030,11 +1035,6 @@ export function OverviewPage() {
                         <td className="px-4 py-4 align-top">
                           <div className="space-y-1">
                             <p>{getProductTotal(product)} Total</p>
-                            {preferences.stockView === "projected" && product.plannedQuantity > 0 ? (
-                              <p className="text-xs text-muted-foreground">
-                                +{product.plannedQuantity} projected
-                              </p>
-                            ) : null}
                           </div>
                         </td>
                         <td className="relative px-4 py-4 align-top" onClick={stopRowClick}>

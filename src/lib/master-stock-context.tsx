@@ -17,6 +17,7 @@ import {
   defaultLastSyncedAt,
   defaultMovements,
   defaultPreferences,
+  defaultProductionPlans,
   defaultProducts,
   defaultRole,
 } from "@/lib/mock-data";
@@ -26,14 +27,18 @@ import type {
   AdjustmentLog,
   BatchLine,
   Category,
+  CreateProductionPlanInput,
   CreateBatchInput,
   Preferences,
   Product,
+  ProductionPlan,
   ProductionBatch,
+  ProductionPlanItem,
   ReceiveLineInput,
   StockLocationKey,
   StockMovement,
   ToastMessage,
+  UpdateProductionPlanInput,
   UpdateProductPricingInput,
   UserRole,
 } from "@/lib/types";
@@ -43,6 +48,7 @@ type AdjustmentMode = "set" | "delta";
 interface MasterStockContextValue {
   products: Product[];
   categories: Category[];
+  productionPlans: ProductionPlan[];
   batches: ProductionBatch[];
   movements: StockMovement[];
   adjustments: AdjustmentLog[];
@@ -52,7 +58,6 @@ interface MasterStockContextValue {
   toasts: ToastMessage[];
   setCurrentUserRole: (role: UserRole) => void;
   setRowsPerPage: (rowsPerPage: number) => void;
-  setStockView: (view: Preferences["stockView"]) => void;
   createCategory: (name: string) => { ok: boolean; category?: Category; error?: string };
   renameCategory: (categoryId: string, name: string) => { ok: boolean; error?: string };
   reorderCategory: (
@@ -63,10 +68,12 @@ interface MasterStockContextValue {
   moveCategory: (categoryId: string, direction: "up" | "down") => void;
   removeCategory: (categoryId: string) => { ok: boolean; error?: string };
   createProduct: (input: AddProductInput) => void;
+  createProductionPlan: (input: CreateProductionPlanInput) => ProductionPlan;
+  updateProductionPlan: (input: UpdateProductionPlanInput) => void;
+  completeProductionPlan: (planId: string) => void;
+  deleteProductionPlan: (planId: string) => void;
   updateProductPricing: (input: UpdateProductPricingInput) => void;
   archiveProduct: (productId: string) => void;
-  updatePlanning: (productId: string, quantity: number, note?: string) => void;
-  resetPlanning: (productId: string) => void;
   updateThreshold: (productId: string, threshold: number) => void;
   adjustStock: (input: {
     productId: string;
@@ -116,10 +123,37 @@ function normalizeCategories(input: Category[]) {
     .map((category, index) => ({ ...category, order: index }));
 }
 
+function normalizeProductionPlans(input: ProductionPlan[]): ProductionPlan[] {
+  return input.map((plan, index): ProductionPlan => ({
+    id: plan.id,
+    name:
+      typeof plan.name === "string" && plan.name.trim()
+        ? plan.name.trim()
+        : `Production Plan ${index + 1}`,
+    source: plan.source,
+    notes:
+      typeof plan.notes === "string" && plan.notes.trim() ? plan.notes.trim() : undefined,
+    items: Array.isArray(plan.items)
+      ? plan.items.map((item) => ({
+          productId: item.productId,
+          quantity: Math.max(0, item.quantity),
+        }))
+      : [],
+    createdAt: typeof plan.createdAt === "string" ? plan.createdAt : defaultLastSyncedAt,
+    status: plan.status === "completed" ? "completed" : "draft",
+    completedAt:
+      plan.status === "completed" && typeof plan.completedAt === "string"
+        ? plan.completedAt
+        : undefined,
+  }));
+}
+
 export function MasterStockProvider({ children }: { children: ReactNode }) {
   const toastTimeouts = useRef<Map<string, number>>(new Map());
   const [products, setProducts] = useState<Product[]>(defaultProducts);
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
+  const [productionPlans, setProductionPlans] =
+    useState<ProductionPlan[]>(normalizeProductionPlans(defaultProductionPlans));
   const [batches, setBatches] = useState(defaultBatches);
   const [movements, setMovements] = useState(defaultMovements);
   const [adjustments, setAdjustments] = useState<AdjustmentLog[]>([]);
@@ -136,6 +170,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       const parsed = JSON.parse(stored) as Partial<{
         products: Product[];
         categories: Category[];
+        productionPlans: ProductionPlan[];
         batches: ProductionBatch[];
         movements: StockMovement[];
         adjustments: AdjustmentLog[];
@@ -146,6 +181,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
       if (parsed.products) setProducts(parsed.products);
       if (parsed.categories) setCategories(normalizeCategories(parsed.categories));
+      if (parsed.productionPlans) setProductionPlans(normalizeProductionPlans(parsed.productionPlans));
       if (parsed.batches) setBatches(parsed.batches);
       if (parsed.movements) setMovements(parsed.movements);
       if (parsed.adjustments) setAdjustments(parsed.adjustments);
@@ -163,6 +199,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       JSON.stringify({
         products,
         categories,
+        productionPlans,
         batches,
         movements,
         adjustments,
@@ -179,6 +216,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     lastSyncedAt,
     movements,
     preferences,
+    productionPlans,
     products,
   ]);
 
@@ -361,7 +399,6 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
           currentStock: input.currentStock,
           lowStockThreshold: input.lowStockThreshold,
           velocity30d: 0,
-          plannedQuantity: 0,
           wholesaleActive: input.wholesaleActive ?? true,
           consignmentActive: input.consignmentActive ?? true,
           wholesalePriceEur: input.wholesalePriceEur ?? 0,
@@ -378,6 +415,106 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       });
     },
     [pushToast, syncTimestamp],
+  );
+
+  const createProductionPlan = useCallback(
+    (input: CreateProductionPlanInput) => {
+      const normalizedItems = (input.items ?? []).map((item) => ({
+        productId: item.productId,
+        quantity: Math.max(0, item.quantity),
+      }));
+
+      const nextPlan: ProductionPlan = {
+        id: makeId("plan"),
+        name: input.name.trim(),
+        source: input.source,
+        notes: input.notes?.trim() || undefined,
+        items: normalizedItems,
+        createdAt: new Date().toISOString(),
+        status: "draft",
+      };
+
+      setProductionPlans((current) => [nextPlan, ...current]);
+      pushToast({
+        title: "Production plan created successfully",
+        description: "Incoming stock planning was saved separately from real inventory.",
+        variant: "success",
+      });
+
+      return nextPlan;
+    },
+    [pushToast],
+  );
+
+  const updateProductionPlan = useCallback(
+    ({ planId, name, source, notes, items }: UpdateProductionPlanInput) => {
+      setProductionPlans((current) =>
+        current.map((plan) => {
+          if (plan.id !== planId) {
+            return plan;
+          }
+
+          if (plan.status === "completed") {
+            return plan;
+          }
+
+          const normalizedItems: ProductionPlanItem[] | undefined = items?.map((item) => ({
+            productId: item.productId,
+            quantity: Math.max(0, item.quantity),
+          }));
+
+          return {
+            ...plan,
+            name: typeof name === "string" ? name.trim() || plan.name : plan.name,
+            source: source ?? plan.source,
+            notes:
+              typeof notes === "string"
+                ? notes.trim() || undefined
+                : notes === undefined
+                  ? plan.notes
+                  : undefined,
+            items: normalizedItems ?? plan.items,
+          };
+        }),
+      );
+    },
+    [],
+  );
+
+  const completeProductionPlan = useCallback(
+    (planId: string) => {
+      const completedAt = new Date().toISOString();
+
+      setProductionPlans((current) =>
+        current.map((plan) =>
+          plan.id === planId
+            ? {
+                ...plan,
+                status: "completed",
+                completedAt,
+              }
+            : plan,
+        ),
+      );
+
+      pushToast({
+        title: "Production plan completed",
+        description: "This plan is now locked and ready for PDF export.",
+        variant: "success",
+      });
+    },
+    [pushToast],
+  );
+
+  const deleteProductionPlan = useCallback(
+    (planId: string) => {
+      setProductionPlans((current) => current.filter((plan) => plan.id !== planId));
+      pushToast({
+        title: "Production plan deleted",
+        description: "The plan was removed from the planning workspace.",
+      });
+    },
+    [pushToast],
   );
 
   const updateProductPricing = useCallback(
@@ -429,53 +566,6 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       pushToast({
         title: "Stock archived",
         description: "The stock item was moved out of the active list.",
-      });
-    },
-    [pushToast, syncTimestamp],
-  );
-
-  const updatePlanning = useCallback(
-    (productId: string, quantity: number, note?: string) => {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === productId
-            ? {
-                ...product,
-                plannedQuantity: Math.max(0, quantity),
-                plannedNote: note,
-                updatedAt: new Date().toISOString(),
-              }
-            : product,
-        ),
-      );
-      syncTimestamp();
-      pushToast({
-        title: "Planning layer updated",
-        description: "Projected stock changed, but physical stock remains untouched.",
-        variant: "success",
-      });
-    },
-    [pushToast, syncTimestamp],
-  );
-
-  const resetPlanning = useCallback(
-    (productId: string) => {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === productId
-            ? {
-                ...product,
-                plannedQuantity: 0,
-                plannedNote: undefined,
-                updatedAt: new Date().toISOString(),
-              }
-            : product,
-        ),
-      );
-      syncTimestamp();
-      pushToast({
-        title: "Planning layer reset",
-        description: "Projected stock now matches physical stock again.",
       });
     },
     [pushToast, syncTimestamp],
@@ -806,6 +896,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     () => ({
       products,
       categories,
+      productionPlans,
       batches,
       movements,
       adjustments,
@@ -816,18 +907,18 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       setCurrentUserRole,
       setRowsPerPage: (rowsPerPage) =>
         setPreferences((current) => ({ ...current, rowsPerPage })),
-      setStockView: (stockView) =>
-        setPreferences((current) => ({ ...current, stockView })),
       createCategory,
       renameCategory,
       reorderCategory,
       moveCategory,
       removeCategory,
       createProduct,
+      createProductionPlan,
+      updateProductionPlan,
+      completeProductionPlan,
+      deleteProductionPlan,
       updateProductPricing,
       archiveProduct,
-      updatePlanning,
-      resetPlanning,
       updateThreshold,
       adjustStock,
       createBatch,
@@ -845,10 +936,14 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       batches,
       cancelBatch,
       categories,
+      createProductionPlan,
       createBatch,
       createCategory,
       createProduct,
+      completeProductionPlan,
+      updateProductionPlan,
       currentUserRole,
+      deleteProductionPlan,
       dismissToast,
       enterReceiving,
       finalizeBatch,
@@ -856,6 +951,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       moveCategory,
       movements,
       preferences,
+      productionPlans,
       products,
       receiveBatch,
       removeCategory,
@@ -865,9 +961,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       updateProductPricing,
       archiveProduct,
       updateBatchDraft,
-      updatePlanning,
       updateThreshold,
-      resetPlanning,
     ],
   );
 

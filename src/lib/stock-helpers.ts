@@ -17,10 +17,6 @@ export function getProductTotal(product: Product) {
   );
 }
 
-export function getProjectedTotal(product: Product) {
-  return getProductTotal(product) + product.plannedQuantity;
-}
-
 export function getStockStatus(product: Product): StockStatus {
   const total = getProductTotal(product);
 

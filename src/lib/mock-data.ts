@@ -1,5 +1,6 @@
 import type {
   Category,
+  ProductionPlan,
   Preferences,
   Product,
   ProductionBatch,
@@ -11,7 +12,6 @@ const now = new Date("2026-04-15T09:40:54+08:00");
 
 export const defaultPreferences: Preferences = {
   rowsPerPage: 10,
-  stockView: "current",
 };
 
 export const defaultRole: UserRole = "owner";
@@ -38,8 +38,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 2, mita: 0, warehouse: 17 },
     lowStockThreshold: 7,
     velocity30d: 1.2,
-    plannedQuantity: 4,
-    plannedNote: "Casting finishing next week",
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 9.9,
@@ -55,7 +53,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 11 },
     lowStockThreshold: 5,
     velocity30d: 0.4,
-    plannedQuantity: 0,
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 8.8,
@@ -71,7 +68,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 10 },
     lowStockThreshold: 5,
     velocity30d: 0.9,
-    plannedQuantity: 0,
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 8.6,
@@ -87,8 +83,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 0 },
     lowStockThreshold: 5,
     velocity30d: 1.7,
-    plannedQuantity: 16,
-    plannedNote: "Covered by new plating run",
     wholesaleActive: true,
     consignmentActive: false,
     wholesalePriceEur: 9.4,
@@ -104,8 +98,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 0 },
     lowStockThreshold: 6,
     velocity30d: 0.8,
-    plannedQuantity: 20,
-    plannedNote: "Incoming from workshop A",
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 10.2,
@@ -121,7 +113,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 0 },
     lowStockThreshold: 4,
     velocity30d: 0.2,
-    plannedQuantity: 0,
     wholesaleActive: false,
     consignmentActive: true,
     wholesalePriceEur: 7.9,
@@ -137,7 +128,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 11 },
     lowStockThreshold: 4,
     velocity30d: 0.5,
-    plannedQuantity: 0,
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 8.2,
@@ -153,8 +143,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 0 },
     lowStockThreshold: 5,
     velocity30d: 1.1,
-    plannedQuantity: 8,
-    plannedNote: "Waiting assembly",
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 9.1,
@@ -170,7 +158,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 0, warehouse: 23 },
     lowStockThreshold: 8,
     velocity30d: 1.4,
-    plannedQuantity: 0,
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 11.4,
@@ -186,8 +173,6 @@ export const defaultProducts: Product[] = [
     currentStock: { indira: 0, mita: 1, warehouse: 0 },
     lowStockThreshold: 6,
     velocity30d: 2.2,
-    plannedQuantity: 12,
-    plannedNote: "Hand-off to Indira expected",
     wholesaleActive: true,
     consignmentActive: true,
     wholesalePriceEur: 10.8,
@@ -228,6 +213,8 @@ export const defaultBatches: ProductionBatch[] = [
     ]
   }
 ];
+
+export const defaultProductionPlans: ProductionPlan[] = [];
 
 export const defaultMovements: StockMovement[] = [
   {

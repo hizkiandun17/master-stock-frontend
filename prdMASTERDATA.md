@@ -3,12 +3,12 @@
 ## 1. Overview
 Saat ini, halaman "Master Stock" pada sistem O-SHE hanya berupa tabel data mentah dan tombol *export*. Hal ini menyulitkan *Owner* dan Tim Produksi untuk memantau kesehatan stok secara cepat, mengambil keputusan, serta mengelola data master (kategori) dan koreksi stok tanpa berpindah modul. Selain itu, tidak adanya visibilitas terhadap rencana stok yang akan datang menyebabkan perencanaan produksi sering kali tidak akurat karena bergantung pada catatan manual di luar sistem (kertas/Excel terpisah).
 
-Proyek ini bertujuan untuk **meningkatkan (enhance)** halaman Master Stock menjadi sebuah *dashboard* interaktif dan pusat manajemen operasional ringan. Tujuan utamanya adalah agar pengguna dapat membuka halaman tersebut dan dalam hitungan detik langsung mengetahui metrik utama (Total SKU, stok menipis, stok habis), mengetahui secara pasti produk mana yang harus diproduksi ulang lebih dulu melalui fitur **Restock Priority**, mengelola kategori produk secara efisien tanpa interrupt workflow, melakukan koreksi stok cepat dengan audit trail yang jelas, serta memanfaatkan lapisan **Perencanaan Stok (Planning Layer)** untuk menghitung proyeksi ketersediaan stok di masa depan (*Projected Stock*) tanpa mengubah data fisik aktual hingga saatnya diterima melalui modul O-FLOW.
+Proyek ini bertujuan untuk **meningkatkan (enhance)** halaman Master Stock menjadi sebuah *dashboard* interaktif dan pusat manajemen operasional ringan. Tujuan utamanya adalah agar pengguna dapat membuka halaman tersebut dan dalam hitungan detik langsung mengetahui metrik utama (Total SKU, stok menipis, stok habis), mengetahui secara pasti produk mana yang harus diproduksi ulang lebih dulu melalui fitur **Restock Priority**, mengelola kategori produk secara efisien tanpa interrupt workflow, serta melakukan koreksi stok cepat dengan audit trail yang jelas berdasarkan stok fisik aktual.
 
 ## 2. Requirements
 - **Integrasi Seamless:** Pembaruan ini harus terintegrasi dengan mulus ke dalam sistem O-SHE yang sudah ada (bukan membuat ulang aplikasi dari nol).
 - **Performa & Data Freshness:** Data ditampilkan secara *real-time* atau mendekati *real-time*. Tampilan harus mencakup penanda waktu pembaruan data terakhir (*"Last synced: X mins ago"*) untuk memberikan konteks relevansi data.
-- **Logika Prioritas Otomatis:** Sistem harus mampu mengkalkulasi prioritas *restock* secara otomatis yang mempertimbangkan status kritis, kecepatan penjualan, dan rencana stok masuk (*planning layer*).
+- **Logika Prioritas Otomatis:** Sistem harus mampu mengkalkulasi prioritas *restock* secara otomatis yang mempertimbangkan status kritis dan kecepatan penjualan.
 - **Logika Sales Velocity (Revisi):**
     - Perhitungan kecepatan penjualan berbasis data **30 hari terakhir**.
     - Rumus: `(Total Qty Sold dalam 30 Hari) / 30 = Rata-rata Penjualan Harian`.
@@ -24,15 +24,7 @@ Proyek ini bertujuan untuk **meningkatkan (enhance)** halaman Master Stock menja
     - Pengguna berwenang dapat menyesuaikan stok langsung dari halaman Master Stock.
     - Setiap penyesuaian wajib mencatat alasan, pengguna, waktu, dan nilai sebelum/sesudah (Audit Log).
     - Pembatasan akses berdasarkan peran (RBAC): Hanya Owner/Admin yang bisa adjust stok.
-- **Temporary Planning Layer & Projected Visibility:**
-    - Sistem harus memungkinkan pencatatan rencana stok masuk (*Incoming Plan*) yang bersifat simulasi sementara.
-    - Data simulasi ini **tidak mempengaruhi** stok fisik utama di database produk secara langsung.
-    - Pengguna dapat beralih tampilan antara "Stok Aktual" dan "Stok Proyeksi (Simulasi)".
-    - Perhitungan proyeksi bersifat dinamis: `Stok Aktual + Rencana Incoming (Simulasi)`.
-    - Modul O-FLOW tetap menjadi satu-satunya Sumber Kebenaran (*Source of Truth*) untuk stok fisik aktual.
-    - Data Planning Layer disimpan dalam bentuk agregat per produk (total rencana per SKU) untuk kesederhanaan MVP.
-    - Visualisasi menggunakan format: `Stok Aktual (+Rencana)`, contoh: `10 (+5)`.
-- **Keamanan Data:** Validasi diperlukan untuk mencegah duplikasi nama kategori dan memastikan integritas data stok saat adjustment. Data simulasi harus dapat di-reset atau diedit tanpa dampak pada data historis transaksi.
+- **Keamanan Data:** Validasi diperlukan untuk mencegah duplikasi nama kategori dan memastikan integritas data stok saat adjustment.
 
 ## 3. Phasing (MVP vs Future)
 Untuk menjaga fokus pengembangan dan dampak operasional, fitur dibagi menjadi dua fase:
@@ -48,12 +40,6 @@ Fokus pada visibilitas data, manajemen dasar, usability tabel, dan alat perencan
 - **Inline Category Creation:** Ability to add new category without leaving the product form.
 - **Quick Stock Adjustment:** Manual stock correction with Reason input & Audit Log.
 - **RBAC for Adjustment:** Restrict stock adjustment to Owner/Admin roles.
-- **Temporary Incoming Planning:** Ability to add simulated incoming stock quantity per product for planning purposes (aggregate data per SKU).
-- **Projected Stock View Toggle:** Switch to view Current vs Projected Stock (Simulation) on the main table with global visual indicator.
-- **Projected Stock Visualization:** Display format "Actual (+Plan)" e.g., "10 (+5)" with secondary color for planned quantity.
-- **Edit/Reset Planning Data:** Ability to modify or clear simulated incoming data without affecting physical stock.
-- **Priority Context Indicator:** Show visual hint when stock is low but planning data covers the shortage.
-
 ### Fase 2: Future Enhancements
 Fokus pada otomatisasi lanjutan dan manajemen struktur kompleks.
 - **Dynamic Sales Velocity:** Kalkulasi otomatis *real-time* berdasarkan riwayat transaksi sales (tanpa input manual).
@@ -61,8 +47,6 @@ Fokus pada otomatisasi lanjutan dan manajemen struktur kompleks.
 - **Advanced Category Ordering:** Drag-and-Drop interface untuk mengurutkan kategori dalam Collection secara visual dan kompleks.
 - **User-Specific Views:** Tampilan khusus *Owner* (Fokus pada nilai aset & risiko keuangan) vs *Production* (Fokus pada list eksekusi harian).
 - **Adjustment Analytics:** Laporan khusus mengenai sejarah penyesuaian stok untuk audit keuangan.
-- **Automated Planning Sync:** Integrasi status planning layer dengan Purchase Order (PO) sistem jika ada (mengubah simulasi menjadi komitmen nyata).
-- **Planning Layer Analytics:** Laporan historis mengenai akurasi perencanaan vs realisasi stok masuk.
 
 ## 4. Core Features
 
@@ -89,7 +73,7 @@ Sebuah daftar "Top Priority" di bagian atas tabel (Top 5-10) yang menggunakan **
   - *Sisa Stok:* Stok paling sedikit mendapatkan poin tertinggi.
   - *Velocity:* Produk dengan penjualan harian rata-rata lebih tinggi mendapatkan poin lebih tinggi.
 - **Tujuan:** Memastikan produk yang "Laris tapi Habis" muncul paling atas, bukan produk "Jarang Lari dan Habis".
-- **Planning Consideration:** Prioritas tetap berdasarkan stok fisik, namun jika terdapat data Planning Layer yang signifikan (misal: stok 0 tapi ada rencana masuk 50), sistem menampilkan indikator konteks seperti "⏳ Dalam Proses Pemenuhan" agar pengguna memahami bahwa kebutuhan tersebut sedang dalam jalur pemenuhan.
+- **Prioritas Fisik:** Prioritas restock sepenuhnya berdasarkan stok fisik aktual dan data velocity.
 
 ### D. Direct Action (Actionable Insights)
 Memungkinkan user bertindak langsung dari dashboard:
@@ -138,42 +122,13 @@ Fitur untuk koreksi stok cepat langsung dari tabel Master Stock:
 - **Feedback:** Notifikasi Toast (Success/Error) muncul segera setelah aksi dilakukan.
 - **RBAC:** Role 'Production' hanya dapat melihat data stok, tidak dapat melakukan adjustment.
 
-### J. Temporary Planning Layer & Projected Stock View
-Fitur untuk simulasi perencanaan stok yang akan datang tanpa mengubah data fisik aktual.
-
-- **View Toggle Switch:** Tombol toggle di atas tabel utama untuk beralih antara mode **"Current Stock"** (Default/Aktual) dan **"Projected Stock (Simulation)"**.
-- **Global Visual Indicator:** Saat mode "Projected" aktif, terdapat indikator visual global (misal: banner atau badge berwarna biru muda di header tabel) yang menandakan pengguna sedang melihat data simulasi untuk menjaga kesadaran konteks.
-- **Projected Logic:**
-    - Saat mode "Projected" aktif, kolom stok menampilkan kalkulasi dinamis: `Stok Fisik + Total Incoming Plan (Simulasi)`.
-    - **Format Visual:** `10 (+5)` di mana 10 adalah stok fisik dan +5 adalah rencana simulasi.
-    - **Warna:** Angka stok fisik ditampilkan dengan warna utama (hitam/abu tua), sedangkan angka rencana simulasi diberikan warna sekunder (biru muda atau abu-abu) untuk membedakan dari stok fisik sesuai prinsip desain minimalis.
-    - Stok fisik tetap menjadi nilai utama yang ditampilkan, sementara nilai perencanaan adalah informasi tambahan sekunder.
-- **Planning Data Entry:**
-    - Tombol "Add Plan" pada baris produk (akses Owner/Admin/Production Lead).
-    - Input: Jumlah Qty Rencana (agregat per produk), Catatan (opsional).
-    - Sifat Data: **Temporary & Editable**. Data ini disimpan untuk keperluan tampilan proyeksi, namun tidak mengunci status.
-    - Data disimpan dalam bentuk agregat per produk untuk menjaga kesederhanaan penggunaan dan performa sistem pada Fase 1.
-- **Edit & Reset Capability:**
-    - Pengguna dapat mengedit jumlah rencana incoming kapan saja.
-    - Pengguna dapat mereset/menghapus seluruh data rencana incoming untuk produk tertentu tanpa mempengaruhi stok fisik.
-    - Tidak ada workflow "Confirm Receipt". Perpindahan ke stok fisik hanya terjadi melalui modul O-FLOW (Source of Truth).
-    - Data Planning Layer bersifat sementara, dapat diperbarui, dihapus, atau di-reset kapan saja sesuai kebutuhan.
-- **Priority Context Integration:**
-    - Restock Priority tetap menggunakan stok aktual sebagai dasar utama perhitungan.
-    - Jika terdapat data Planning Layer yang secara signifikan dapat menutupi kekurangan stok (misal: stok 0 tapi ada rencana 50), sistem memberikan indikator tambahan pada baris prioritas (misal: icon atau label "Dalam Pemenuhan").
-    - Hal ini membantu pengguna memahami bahwa kebutuhan tersebut sedang dalam proses pemenuhan tanpa mengubah skor prioritas dasar.
-- **Operational Goal:** Menggantikan catatan manual/print-out produksi dengan alat simulasi digital terpusat untuk perencanaan yang lebih akurat. Seluruh proses perencanaan dan simulasi stok dapat dilakukan secara langsung di dalam sistem dengan lebih cepat, fleksibel, dan mudah dipahami.
-
 ## 5. User Flow
 1.  **Masuk ke Modul:** Pengguna *login* ke O-SHE dan membuka menu "Master Stock".
 2.  **Cek Freshness Data:** User melihat label *"Last synced: 5 mins ago"* untuk memastikan data valid.
 3.  **Review Cepat:** User melihat Dashboard Summary (Owner fokus pada risiko OOS, Production fokus pada jumlah Low Stock).
-4.  **Analisis Prioritas & Planning:**
+4.  **Analisis Prioritas:**
     - Tim Produksi melihat bagian "Restock Priority".
-    - User mengaktifkan Toggle **"Projected Stock (Simulation)"**.
-    - Sistem menampilkan indikator visual global bahwa mode simulasi aktif.
-    - Tabel menampilkan format `Stok Aktual (+Rencana)`, contoh: `0 (+50)`.
-    - User menyadari bahwa meskipun stok fisik 0, ada rencana incoming 50 pcs yang dicatat sebagai simulasi, sehingga prioritas produksi dapat disesuaikan dengan konteks bahwa kebutuhan sedang dalam proses pemenuhan.
+    - Tabel menampilkan stok fisik aktual sebagai dasar keputusan produksi dan replenishment.
 5.  **Pengaturan Tampilan Tabel (Usability):**
     - User ingin melihat lebih banyak data sekaligus. User mengubah opsi pagination dari "10" menjadi "50" per halaman.
     - Tabel langsung memperbarui tampilan tanpa reload. Preferensi "50" tersimpan untuk kunjungan berikutnya.
@@ -185,16 +140,11 @@ Fitur untuk simulasi perencanaan stok yang akan datang tanpa mengubah data fisik
     - Owner klik ikon "Adjust" pada baris produk.
     - Input selisih dan alasan ("Stock Opname Bulan Ini").
     - Sistem update stok fisik, catat audit log, dan tampilkan notifikasi sukses.
-8.  **Recording Planning Data (Simulasi):**
-    - Production Lead menerima informasi dari pengrajin bahwa 20 pcs kemeja akan selesai minggu depan.
-    - User klik "Add Plan" pada produk terkait, input 20 pcs sebagai rencana (data agregat per produk).
-    - Tabel Master Stock (mode Projected) langsung menunjukkan penambahan `+20` secara visual dengan warna sekunder.
-    - *Catatan:* Stok fisik di database produk tidak berubah. Data bersifat temporary dan dapat di-edit/di-reset kapan saja.
-9.  **Tindak Lanjut:**
+8.  **Tindak Lanjut:**
     - Jika butuh laporan fisik, User menekan "Export". Karena filter "Out of Stock" masih aktif, file Excel yang terunduh hanya berisi item yang habis (Filtered Export).
     - Urutan kategori di dalam export mengikuti urutan yang diatur di "Manage Categories".
-    - Jika barang benar-benar tiba, user melakukan proses penerimaan resmi di modul **O-FLOW**, yang akan memperbarui stok fisik secara permanen. User kemudian dapat mereset data simulasi di Master Stock.
-10. **Penyesuaian:** User mengedit *threshold* pada produk tertentu untuk mencegah peringatan palsu di masa depan.
+    - Jika barang benar-benar tiba, user melakukan proses penerimaan resmi di modul **O-FLOW**, yang akan memperbarui stok fisik secara permanen.
+9. **Penyesuaian:** User mengedit *threshold* pada produk tertentu untuk mencegah peringatan palsu di masa depan.
 
 ## 6. UX & Edge Cases
 Untuk memastikan pengalaman pengguna yang mulus meskipun data tidak ideal:
@@ -217,19 +167,6 @@ Untuk memastikan pengalaman pengguna yang mulus meskipun data tidak ideal:
     - Jika user dengan role 'Production' mencoba mengakses API adjustment, backend harus mengembalikan error 403 Forbidden, dan UI tidak menampilkan tombol adjustment.
 - **Audit Log Integrity:**
     - Field 'Reason' pada adjustment tidak boleh kosong. Jika user mencoba submit tanpa alasan, sistem harus memblokir aksi dan menampilkan pesan error validasi.
-- **Projected Stock Negative Logic:**
-    - Sistem tidak boleh menampilkan stok proyeksi negatif. Jika `Current Stock` = 0 dan `Planning` = 0, tampilan tetap 0.
-- **Planning Data Isolation:**
-    - Memastikan data simulasi planning tidak pernah terbawa ke laporan keuangan atau valuation aset. Hanya berlaku untuk视图 (view) operasional di Master Stock.
-- **Reset Planning Confirmation:**
-    - Jika user ingin mereset semua data planning, tampilkan konfirmasi modal untuk mencegah klik tidak sengaja.
-- **Mode Toggle Awareness:**
-    - Saat user mengaktifkan mode "Projected Stock", pastikan indikator visual global muncul dengan jelas agar user tidak keliru mengira data simulasi sebagai stok fisik.
-    - Saat user mengekspor data dalam mode "Projected", tambahkan watermark atau catatan pada file export bahwa data mengandung nilai simulasi.
-- **Planning Layer Edit Conflict:**
-    - Jika dua user mengedit data planning untuk produk yang sama secara bersamaan, sistem harus menangani konflik dengan mekanisme last-write-wins atau menampilkan peringatan versi.
-- **Large Planning Values:**
-    - Jika user输入 nilai planning yang tidak realistis (misal: 10000 pcs untuk produk yang biasanya 50 pcs/bulan), tampilkan warning soft validation untuk mencegah kesalahan input.
 
 ## 7. Architecture
 Karena ini peningkatan fitur (enhancement), arsitektur berfokus pada bagaimana Frontend meminta data metrik yang sudah diagregasi dari Backend agar proses di *browser* (Client) tidak berat.
@@ -254,14 +191,6 @@ sequenceDiagram
     BE-->>FE: Return JSON (Top Restock Items)
     
     FE-->>User: Tampilkan Dashboard Visual (Cards & Tables)
-    
-    User->>FE: Toggle Projected Stock View (Simulation)
-    FE->>BE: GET /api/stock/list?view=projected
-    BE->>DB: Query Products + SUM(Stock Planning Layer)
-    Note right of DB: Planning Layer tidak mengubah <br/>kolom current_stock di tabel products
-    DB-->>BE: Return Combined Data (Calculated)
-    BE-->>FE: Return JSON (Current + Planning)
-    FE->>User: Render Table with Visual Distinction (e.g., "10 (+5)")
 
     User->>FE: Stock Adjustment (Owner Only)
     FE->>BE: POST /api/stock/adjust (ProductID, NewStock, Reason)
@@ -272,13 +201,6 @@ sequenceDiagram
     BE-->>FE: Return Success & Updated Row
     FE->>User: Show Success Toast
 
-    User->>FE: Update Planning Layer
-    FE->>BE: PUT /api/stock/planning (ProductID, Qty)
-    BE->>DB: UPSERT INTO stock_planning_layer
-    Note right of DB: Tidak ada trigger update stok fisik<br/>Data bersifat temporary & aggregate
-    DB-->>BE: Confirm Update
-    BE-->>FE: Return Success
-    FE->>User: Update View Instantly
 ```
 
 ## 8. Database Schema
@@ -319,15 +241,6 @@ Untuk merealisasikan fitur *dashboard*, logika prioritas, manajemen kategori, au
    - `source` (String): 'manual_adjustment' vs 'o_flow_transaction'
    - `created_at` (Timestamp): Waktu kejadian
 
-5.  **`stock_planning_layer`** (Baru - Untuk Simulasi Incoming Stock)
-   - `id` (UUID): Primary Key
-   - `product_id` (UUID): Relasi ke produk (Unique constraint per product untuk agregat)
-   - `planned_quantity` (Integer): Jumlah rencana stok masuk (Simulasi Agregat per Produk)
-   - `note` (Text): Catatan rencana (opsional)
-   - `created_by` (UUID): User yang mencatat
-   - `updated_at` (Timestamp): Waktu terakhir perubahan rencana
-   - *Catatan:* Tabel ini tidak memiliki status lifecycle (pending/received). Data bersifat editable dan resettable. Tidak mempengaruhi `products.current_stock`. Data disimpan dalam bentuk agregat per produk untuk kesederhanaan MVP.
-
 ```mermaid
 erDiagram
     PRODUCTS {
@@ -366,19 +279,9 @@ erDiagram
         timestamp created_at
     }
 
-    STOCK_PLANNING_LAYER {
-        uuid id PK
-        uuid product_id FK "Unique per product"
-        int planned_quantity "Aggregate per SKU"
-        text note
-        uuid created_by
-        timestamp updated_at
-    }
-
     CATEGORIES ||--o{ PRODUCTS : "mengelompokkan"
     PRODUCTS ||--o{ SALES_TRANSACTIONS : "dijual di"
     PRODUCTS ||--o{ AUDIT_LOGS : "dicatat di"
-    PRODUCTS ||--o{ STOCK_PLANNING_LAYER : "memiliki rencana"
 ```
 
 ## 9. Tech Stack
@@ -388,20 +291,18 @@ Berikut adalah teknologi yang direkomendasikan dan diselaraskan dengan arsitektu
 *   **UI/UX Library:** **shadcn/ui** berbasis Tailwind CSS sebagai library komponen utama. Dipilih untuk konsistensi desain, aksesibilitas, dan kemudahan kustomisasi untuk tabel, modal, dan input form yang sesuai dengan prinsip desain minimalis.
 *   **Drag-and-Drop Library:** `dnd-kit` atau `react-beautiful-dnd` untuk fitur pengurutan kategori.
 *   **Backend:** Node.js (Menggunakan framework seperti Express atau NestJS yang sudah ada).
-*   **Database:** PostgreSQL (Menggunakan query analitik sederhana untuk menghitung *summary*, agregasi 30 hari terakhir, serta kalkulasi projected stock, dan transaction support untuk audit log).
+*   **Database:** PostgreSQL (Menggunakan query analitik sederhana untuk menghitung *summary*, agregasi 30 hari terakhir, dan transaction support untuk audit log).
 *   **Deployment:** VPS (Bisa menggunakan Docker atau PM2 untuk *service* Node.js / Next.js).
-*   **Client State Management:** React Context atau Zustand untuk menangani state pagination, preferensi Local Storage, state kategori, dan toggle view stok.
-*   **Security:** Middleware RBAC di Backend untuk memastikan hanya role Owner/Admin yang dapat mengakses endpoint `/api/stock/adjust` dan `/api/stock/planning`.
+*   **Client State Management:** React Context atau Zustand untuk menangani state pagination, preferensi Local Storage, dan state kategori.
+*   **Security:** Middleware RBAC di Backend untuk memastikan hanya role Owner/Admin yang dapat mengakses endpoint `/api/stock/adjust`.
 
 ## 10. Design Principles (UI/UX)
 Untuk memastikan pengalaman pengguna yang profesional dan fokus pada produktivitas, desain antarmuka harus mengikuti prinsip-prinsip berikut:
 
 - **Vercel-like Aesthetic:** Tampilan minimal, bersih, dan menggunakan *whitespace* (ruang kosong) secara efektif untuk meningkatkan keterbacaan (*legibility*). Hindari elemen dekoratif yang tidak perlu.
-- **Functional Color Palette:** Penggunaan warna bersifat fungsional, bukan dekoratif. Warna digunakan terutama untuk indikator status (misalnya: Merah untuk OOS, Kuning untuk Low Stock) dan aksi penting. Untuk *Planning Layer/Simulation*, gunakan warna sekunder (misal: Biru Muda/Abu) untuk membedakan dari stok fisik tanpa melanggar estetika minimalis.
+- **Functional Color Palette:** Penggunaan warna bersifat fungsional, bukan dekoratif. Warna digunakan terutama untuk indikator status (misalnya: Merah untuk OOS, Kuning untuk Low Stock) dan aksi penting.
 - **Typography & Hierarchy:** Tipografi yang jelas dengan hierarki visual yang tegas (Judul, Sub-judul, Body, Caption) untuk memandu mata pengguna pada informasi penting.
 - **Subtle Borders & Depth:** Gunakan border yang halus dan bayangan (*shadow*) minimal untuk memisahkan elemen tanpa menciptakan visual yang "berisik".
 - **Fast & Responsive Interactions:** Interaksi harus terasa instan. Hindari animasi berlebihan yang memperlambat alur kerja. Fokus pada kecepatan respons sistem.
-- **Consistency:** Konsistensi visual di seluruh komponen (tabel, modal seperti 'Add Plan', tooltip, tombol, toggle switch) agar pengguna merasa berada dalam satu sistem terpadu.
-- **Cognitive Load:** Tujuan utama desain adalah meminimalkan beban kognitif. Pengguna harus bisa memahami data dan mengambil keputusan dengan cepat tanpa kebingungan, terutama saat beralih antara mode "Current" dan "Projected" stock. Harus jelas mana data nyata dan mana data simulasi.
-- **Context Awareness:** Saat mode "Projected Stock" aktif, pastikan terdapat indikator visual global yang jelas (misal: banner atau badge di header) agar pengguna selalu sadar bahwa mereka sedang melihat data simulasi, bukan stok fisik aktual.
-- **Visual Distinction:** Pada format tampilan `Stok Aktual (+Rencana)`, pastikan perbedaan visual antara angka aktual dan angka rencana sangat jelas melalui penggunaan warna (aktual: hitam/abu tua, rencana: biru muda/abu) dan tipografi (rencana dapat menggunakan font weight yang lebih ringan).
+- **Consistency:** Konsistensi visual di seluruh komponen (tabel, modal, tooltip, tombol) agar pengguna merasa berada dalam satu sistem terpadu.
+- **Cognitive Load:** Tujuan utama desain adalah meminimalkan beban kognitif. Pengguna harus bisa memahami data dan mengambil keputusan dengan cepat tanpa kebingungan, dengan fokus penuh pada stok fisik aktual.

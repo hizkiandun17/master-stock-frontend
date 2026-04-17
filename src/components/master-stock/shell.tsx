@@ -20,7 +20,7 @@ export function MasterStockShell({
   currentPath,
   children,
 }: {
-  currentPath: "overview";
+  currentPath: "overview" | "plans";
   children: ReactNode;
 }) {
   const { currentUserRole, setCurrentUserRole } = useMasterStock();
@@ -79,7 +79,31 @@ export function MasterStockShell({
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6 md:py-10">{children}</main>
+      <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6 md:py-10">
+        <div className="mb-6 inline-flex rounded-full border border-border bg-secondary p-1">
+          <Link
+            href="/master-stock"
+            className={
+              currentPath === "overview"
+                ? "rounded-full bg-accent px-4 py-2 text-sm text-foreground"
+                : "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            }
+          >
+            Overview
+          </Link>
+          <Link
+            href="/master-stock/plans"
+            className={
+              currentPath === "plans"
+                ? "rounded-full bg-accent px-4 py-2 text-sm text-foreground"
+                : "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            }
+          >
+            Production Plans
+          </Link>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }

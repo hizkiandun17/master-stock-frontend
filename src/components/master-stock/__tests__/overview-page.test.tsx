@@ -15,8 +15,7 @@ function renderOverview() {
 }
 
 describe("OverviewPage", () => {
-  it("renders the stocks table and toggles projected values inline", async () => {
-    const user = userEvent.setup();
+  it("renders the stocks table with actual-only controls", () => {
     renderOverview();
 
     expect(screen.getByRole("heading", { name: /Stocks/i })).toBeInTheDocument();
@@ -25,12 +24,23 @@ describe("OverviewPage", () => {
     expect(screen.getByText(/Out of Stock/i)).toBeInTheDocument();
     expect(screen.getByText(/Low Stock/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Archived/i).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/\+4 projected/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open export options/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add new stock/i })).toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: /Projected Off/i }));
+  it("shows only global stock exports in the top export menu", async () => {
+    const user = userEvent.setup();
+    renderOverview();
 
-    expect(screen.getByRole("button", { name: /Projected On/i })).toBeInTheDocument();
-    expect(screen.getByText(/\+4 projected/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Open export options/i }));
+
+    expect(screen.getByRole("button", { name: /Stock Summary/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Production Team Report/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Production Plan/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("filters the table when a summary card is clicked", async () => {
@@ -158,7 +168,7 @@ describe("OverviewPage", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
+    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
 
     expect(
       screen.getByRole("heading", { name: /Create New Stock Item/i }),
@@ -196,7 +206,7 @@ describe("OverviewPage", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
+    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
     await user.click(screen.getByRole("button", { name: /Select category/i }));
     await user.click(screen.getByRole("button", { name: /Create new category/i }));
     await user.type(screen.getByPlaceholderText(/Enter category name/i), "Custom Drop Test");
@@ -211,7 +221,7 @@ describe("OverviewPage", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
+    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
     await user.click(screen.getByRole("button", { name: /Manage categories →/i }));
     await user.click(screen.getByRole("button", { name: /Add New Category/i }));
     await user.type(screen.getByPlaceholderText(/Enter category name/i), "Aurora Capsule");

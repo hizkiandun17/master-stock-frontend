@@ -1,7 +1,8 @@
 export type UserRole = "owner" | "admin" | "production_lead" | "production";
-export type StockView = "current" | "projected";
 export type StockStatus = "healthy" | "low" | "out";
 export type StockLocationKey = "indira" | "mita" | "warehouse";
+export type ProductionPlanSource = "indira" | "mita";
+export type ProductionPlanStatus = "draft" | "completed";
 export type BatchStatus =
   | "draft"
   | "prepared"
@@ -32,14 +33,28 @@ export interface Product {
   currentStock: StockLevels;
   lowStockThreshold: number;
   velocity30d: number;
-  plannedQuantity: number;
-  plannedNote?: string;
   wholesaleActive: boolean;
   consignmentActive: boolean;
   wholesalePriceEur: number;
   consignmentPriceIdr: number;
   archived?: boolean;
   updatedAt: string;
+}
+
+export interface ProductionPlanItem {
+  productId: string;
+  quantity: number;
+}
+
+export interface ProductionPlan {
+  id: string;
+  name: string;
+  source: ProductionPlanSource;
+  notes?: string;
+  items: ProductionPlanItem[];
+  createdAt: string;
+  status: ProductionPlanStatus;
+  completedAt?: string;
 }
 
 export interface BatchLine {
@@ -95,7 +110,6 @@ export interface ToastMessage {
 
 export interface Preferences {
   rowsPerPage: number;
-  stockView: StockView;
 }
 
 export interface ReceiveLineInput {
@@ -126,6 +140,21 @@ export interface AddProductInput {
   consignmentActive?: boolean;
   wholesalePriceEur?: number;
   consignmentPriceIdr?: number;
+}
+
+export interface CreateProductionPlanInput {
+  name: string;
+  source: ProductionPlanSource;
+  notes?: string;
+  items?: ProductionPlanItem[];
+}
+
+export interface UpdateProductionPlanInput {
+  planId: string;
+  name?: string;
+  source?: ProductionPlanSource;
+  notes?: string;
+  items?: ProductionPlanItem[];
 }
 
 export interface UpdateProductPricingInput {
