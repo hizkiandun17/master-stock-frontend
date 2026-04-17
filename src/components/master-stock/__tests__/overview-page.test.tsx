@@ -25,7 +25,7 @@ describe("OverviewPage", () => {
     expect(screen.getByText(/Low Stock/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Archived/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Open export options/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Add new stock/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Open add stock options/i })).toBeInTheDocument();
   });
 
   it("shows only global stock exports in the top export menu", async () => {
@@ -168,7 +168,8 @@ describe("OverviewPage", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
+    await user.click(screen.getByRole("button", { name: /Open add stock options/i }));
+    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
 
     expect(
       screen.getByRole("heading", { name: /Create New Stock Item/i }),
@@ -202,11 +203,27 @@ describe("OverviewPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("opens manage categories directly from the add stock dropdown", async () => {
+    const user = userEvent.setup();
+    renderOverview();
+
+    await user.click(screen.getByRole("button", { name: /Open add stock options/i }));
+    await user.click(screen.getByRole("button", { name: /Manage Categories/i }));
+
+    expect(
+      screen.getByRole("heading", { name: /Manage Categories/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Organize and manage your product collections/i),
+    ).toBeInTheDocument();
+  });
+
   it("creates a new category inline from the stock modal and auto-selects it", async () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
+    await user.click(screen.getByRole("button", { name: /Open add stock options/i }));
+    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
     await user.click(screen.getByRole("button", { name: /Select category/i }));
     await user.click(screen.getByRole("button", { name: /Create new category/i }));
     await user.type(screen.getByPlaceholderText(/Enter category name/i), "Custom Drop Test");
@@ -221,7 +238,8 @@ describe("OverviewPage", () => {
     const user = userEvent.setup();
     renderOverview();
 
-    await user.click(screen.getByRole("button", { name: /Add new stock/i }));
+    await user.click(screen.getByRole("button", { name: /Open add stock options/i }));
+    await user.click(screen.getByRole("button", { name: /Add New Stock/i }));
     await user.click(screen.getByRole("button", { name: /Manage categories →/i }));
     await user.click(screen.getByRole("button", { name: /Add New Category/i }));
     await user.type(screen.getByPlaceholderText(/Enter category name/i), "Aurora Capsule");

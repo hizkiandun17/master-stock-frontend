@@ -3,13 +3,8 @@ export type StockStatus = "healthy" | "low" | "out";
 export type StockLocationKey = "indira" | "mita" | "warehouse";
 export type ProductionPlanSource = "indira" | "mita";
 export type ProductionPlanStatus = "draft" | "completed";
-export type BatchStatus =
-  | "draft"
-  | "prepared"
-  | "receiving"
-  | "partially_received"
-  | "received"
-  | "cancelled";
+export type BatchStatus = "draft" | "in_progress" | "completed";
+export type ActivityKind = "created" | "added" | "removed" | "edited" | "completed";
 
 export interface Category {
   id: string;
@@ -46,6 +41,16 @@ export interface ProductionPlanItem {
   quantity: number;
 }
 
+export interface ActivityEntry {
+  id: string;
+  kind: ActivityKind;
+  title: string;
+  detail?: string;
+  actor?: string;
+  createdAt: string;
+  action?: string;
+}
+
 export interface ProductionPlan {
   id: string;
   name: string;
@@ -55,27 +60,30 @@ export interface ProductionPlan {
   createdAt: string;
   status: ProductionPlanStatus;
   completedAt?: string;
+  history: ActivityEntry[];
 }
 
 export interface BatchLine {
   id: string;
   productId: string;
   plannedQty: number;
-  receivedQtyConfirmed: number;
+  receivedQty: number;
+  checked: boolean;
   note?: string;
 }
 
 export interface ProductionBatch {
   id: string;
-  code: string;
+  name?: string;
+  source: StockLocationKey;
   status: BatchStatus;
-  assignedSource: string;
-  destinationStockKey: StockLocationKey;
   notes?: string;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  completedAt?: string;
   items: BatchLine[];
+  history: ActivityEntry[];
 }
 
 export interface StockMovement {
@@ -112,20 +120,14 @@ export interface Preferences {
   rowsPerPage: number;
 }
 
-export interface ReceiveLineInput {
-  lineId: string;
-  quantity: number;
-}
-
 export interface CreateBatchInput {
-  code?: string;
-  assignedSource: string;
-  destinationStockKey: StockLocationKey;
+  name?: string;
+  source: StockLocationKey;
   notes?: string;
-  items: Array<{
+  items?: Array<{
     productId: string;
     plannedQty: number;
-    note?: string;
+    receivedQty?: number;
   }>;
 }
 

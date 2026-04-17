@@ -21,10 +21,10 @@ import {
   defaultProducts,
   defaultRole,
 } from "@/lib/mock-data";
-import { getBatchTotals } from "@/lib/stock-helpers";
 import type {
   AddProductInput,
   AdjustmentLog,
+  ActivityEntry,
   BatchLine,
   Category,
   CreateProductionPlanInput,
@@ -34,7 +34,6 @@ import type {
   ProductionPlan,
   ProductionBatch,
   ProductionPlanItem,
-  ReceiveLineInput,
   StockLocationKey,
   StockMovement,
   ToastMessage,
@@ -42,6 +41,7 @@ import type {
   UpdateProductPricingInput,
   UserRole,
 } from "@/lib/types";
+import { titleCase } from "@/lib/utils";
 
 type AdjustmentMode = "set" | "delta";
 
@@ -82,18 +82,15 @@ interface MasterStockContextValue {
     value: number;
     reason: string;
   }) => void;
-  createBatch: (input: CreateBatchInput) => void;
-  updateBatchDraft: (
+  createBatch: (input: CreateBatchInput) => ProductionBatch;
+  updateBatch: (
     batchId: string,
-    patch: Partial<Pick<ProductionBatch, "assignedSource" | "destinationStockKey" | "notes">> & {
+    patch: Partial<Pick<ProductionBatch, "name" | "source" | "notes">> & {
       items?: BatchLine[];
     },
   ) => void;
-  markBatchPrepared: (batchId: string) => void;
-  cancelBatch: (batchId: string) => void;
-  enterReceiving: (batchId: string) => void;
-  finalizeBatch: (batchId: string) => void;
-  receiveBatch: (batchId: string, lines: ReceiveLineInput[]) => void;
+  completeBatch: (batchId: string) => void;
+  deleteBatch: (batchId: string) => void;
   dismissToast: (id: string) => void;
 }
 
@@ -103,6 +100,138 @@ const MasterStockContext = createContext<MasterStockContextValue | null>(null);
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function getSourceLabel(source?: string) {
+  return titleCase(source || "") || "-";
+}
+
+function createActivityEntry(
+  entry: Omit<ActivityEntry, "id"> & { id?: string },
+): ActivityEntry {
+  return {
+    id: entry.id ?? makeId("activity"),
+    kind: entry.kind,
+    title: entry.title,
+    detail: entry.detail,
+    actor: entry.actor,
+    createdAt: entry.createdAt,
+  };
+}
+
+function parseLegacyActivityAction(
+  action: string | undefined,
+  fallbackActor: string,
+  sourceLabel?: string,
+): Pick<ActivityEntry, "kind" | "title" | "detail" | "actor"> {
+  const normalizedAction = action?.trim();
+  if (!normalizedAction) {
+    return {
+      kind: "created",
+      title: "Created",
+      actor: fallbackActor,
+    };
+  }
+
+  const createdMatch = normalizedAction.match(/^Created by (.+)$/i);
+  if (createdMatch) {
+    return {
+      kind: "created",
+      title: "Created",
+      actor: createdMatch[1]?.trim() || fallbackActor,
+    };
+  }
+
+  const addedMatch = normalizedAction.match(/^Added (.+?)(?:: (\d+) pcs)?$/i);
+  if (addedMatch) {
+    const [, itemLabel, quantity] = addedMatch;
+    const detailParts = [];
+    if (quantity) {
+      detailParts.push(`+${quantity} pcs`);
+    }
+    if (sourceLabel) {
+      detailParts.push(`Source: ${sourceLabel}`);
+    }
+    return {
+      kind: "added",
+      title: `Added ${itemLabel?.trim() || "item"}`,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      actor: fallbackActor,
+    };
+  }
+
+  const removedMatch = normalizedAction.match(/^Removed (.+?)(?:: (\d+) pcs)?$/i);
+  if (removedMatch) {
+    const [, itemLabel, quantity] = removedMatch;
+    const detailParts = [];
+    if (quantity) {
+      detailParts.push(`-${quantity} pcs`);
+    }
+    if (sourceLabel) {
+      detailParts.push(`Source: ${sourceLabel}`);
+    }
+    return {
+      kind: "removed",
+      title: `Removed ${itemLabel?.trim() || "item"}`,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      actor: fallbackActor,
+    };
+  }
+
+  const editedMatch = normalizedAction.match(/^Edited quantity for (.+?): (\d+) → (\d+)$/i);
+  if (editedMatch) {
+    const [, itemLabel, previousQuantity, nextQuantity] = editedMatch;
+    return {
+      kind: "edited",
+      title: `Edited quantity for ${itemLabel?.trim() || "item"}`,
+      detail: `${previousQuantity} → ${nextQuantity} pcs`,
+      actor: fallbackActor,
+    };
+  }
+
+  const completedMatch = normalizedAction.match(/^Completed (plan|batch)$/i);
+  if (completedMatch) {
+    return {
+      kind: "completed",
+      title: `Completed ${completedMatch[1]}`,
+      detail: sourceLabel ? `Updated stock for ${sourceLabel}` : undefined,
+      actor: fallbackActor,
+    };
+  }
+
+  return {
+    kind: "edited",
+    title: normalizedAction,
+    actor: fallbackActor,
+  };
+}
+
+function normalizeHistoryEntry(
+  entry: Partial<ActivityEntry> | undefined,
+  createdAt: string,
+  fallbackActor: string,
+  sourceLabel?: string,
+): ActivityEntry {
+  if (entry?.title && entry?.kind) {
+    return {
+      id: entry.id || makeId("activity"),
+      kind: entry.kind,
+      title: entry.title,
+      detail: entry.detail,
+      actor: entry.actor || fallbackActor,
+      createdAt: typeof entry.createdAt === "string" ? entry.createdAt : createdAt,
+    };
+  }
+
+  const parsed = parseLegacyActivityAction(entry?.action, fallbackActor, sourceLabel);
+  return {
+    id: entry?.id || makeId("activity"),
+    kind: parsed.kind,
+    title: parsed.title,
+    detail: parsed.detail,
+    actor: parsed.actor,
+    createdAt: typeof entry?.createdAt === "string" ? entry.createdAt : createdAt,
+  };
 }
 
 function normalizeCategories(input: Category[]) {
@@ -145,6 +274,76 @@ function normalizeProductionPlans(input: ProductionPlan[]): ProductionPlan[] {
       plan.status === "completed" && typeof plan.completedAt === "string"
         ? plan.completedAt
         : undefined,
+    history: Array.isArray(plan.history)
+      ? plan.history.map((entry) =>
+          normalizeHistoryEntry(
+            entry,
+            typeof plan.createdAt === "string" ? plan.createdAt : defaultLastSyncedAt,
+            "Unknown",
+            getSourceLabel(plan.source),
+          ),
+        )
+      : [
+          createActivityEntry({
+            kind: "created",
+            title: "Created",
+            actor: "Unknown",
+            createdAt: typeof plan.createdAt === "string" ? plan.createdAt : defaultLastSyncedAt,
+          }),
+        ],
+  }));
+}
+
+function normalizeBatches(input: ProductionBatch[]): ProductionBatch[] {
+  return input.map((batch, index): ProductionBatch => ({
+    id: batch.id,
+    name:
+      typeof batch.name === "string" && batch.name.trim()
+        ? batch.name.trim()
+        : `Batch ${index + 1}`,
+    source: batch.source,
+    status: batch.status === "completed" ? "completed" : batch.status === "in_progress" ? "in_progress" : "draft",
+    notes:
+      typeof batch.notes === "string" && batch.notes.trim() ? batch.notes.trim() : undefined,
+    createdAt: typeof batch.createdAt === "string" ? batch.createdAt : defaultLastSyncedAt,
+    updatedAt: typeof batch.updatedAt === "string" ? batch.updatedAt : defaultLastSyncedAt,
+    createdBy: batch.createdBy,
+    completedAt:
+      batch.status === "completed" && typeof batch.completedAt === "string"
+        ? batch.completedAt
+        : undefined,
+    items: Array.isArray(batch.items)
+      ? batch.items.map((item) => ({
+          id: item.id,
+          productId: item.productId,
+          plannedQty: Math.max(0, item.plannedQty),
+          receivedQty: Math.max(0, item.receivedQty),
+          checked:
+            typeof item.checked === "boolean"
+              ? item.checked
+              : batch.status === "completed"
+                ? Math.max(0, item.receivedQty) > 0
+                : false,
+          note: item.note,
+        }))
+      : [],
+    history: Array.isArray(batch.history)
+      ? batch.history.map((entry) =>
+          normalizeHistoryEntry(
+            entry,
+            typeof batch.createdAt === "string" ? batch.createdAt : defaultLastSyncedAt,
+            batch.createdBy || "Unknown",
+            getSourceLabel(batch.source),
+          ),
+        )
+      : [
+          createActivityEntry({
+            kind: "created",
+            title: "Created",
+            actor: batch.createdBy || "Unknown",
+            createdAt: typeof batch.createdAt === "string" ? batch.createdAt : defaultLastSyncedAt,
+          }),
+        ],
   }));
 }
 
@@ -154,7 +353,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>(defaultCategories);
   const [productionPlans, setProductionPlans] =
     useState<ProductionPlan[]>(normalizeProductionPlans(defaultProductionPlans));
-  const [batches, setBatches] = useState(defaultBatches);
+  const [batches, setBatches] = useState<ProductionBatch[]>(normalizeBatches(defaultBatches));
   const [movements, setMovements] = useState(defaultMovements);
   const [adjustments, setAdjustments] = useState<AdjustmentLog[]>([]);
   const [preferences, setPreferences] = useState(defaultPreferences);
@@ -182,7 +381,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       if (parsed.products) setProducts(parsed.products);
       if (parsed.categories) setCategories(normalizeCategories(parsed.categories));
       if (parsed.productionPlans) setProductionPlans(normalizeProductionPlans(parsed.productionPlans));
-      if (parsed.batches) setBatches(parsed.batches);
+      if (parsed.batches) setBatches(normalizeBatches(parsed.batches));
       if (parsed.movements) setMovements(parsed.movements);
       if (parsed.adjustments) setAdjustments(parsed.adjustments);
       if (parsed.preferences) setPreferences(parsed.preferences);
@@ -423,6 +622,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
         productId: item.productId,
         quantity: Math.max(0, item.quantity),
       }));
+      const createdAt = new Date().toISOString();
+      const actorLabel = titleCase(currentUserRole);
 
       const nextPlan: ProductionPlan = {
         id: makeId("plan"),
@@ -430,8 +631,29 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
         source: input.source,
         notes: input.notes?.trim() || undefined,
         items: normalizedItems,
-        createdAt: new Date().toISOString(),
+        createdAt,
         status: "draft",
+        history: [
+          createActivityEntry({
+            id: makeId("plan-history"),
+            kind: "created",
+            title: "Created plan",
+            actor: actorLabel,
+            createdAt,
+          }),
+          ...normalizedItems.map((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            return createActivityEntry({
+              id: makeId("plan-history"),
+              kind: "added",
+              title: `Added ${productName}`,
+              detail: `+${item.quantity} pcs • Source: ${getSourceLabel(input.source)}`,
+              actor: actorLabel,
+              createdAt,
+            });
+          }),
+        ],
       };
 
       setProductionPlans((current) => [nextPlan, ...current]);
@@ -443,7 +665,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
       return nextPlan;
     },
-    [pushToast],
+    [currentUserRole, products, pushToast],
   );
 
   const updateProductionPlan = useCallback(
@@ -462,6 +684,59 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
             productId: item.productId,
             quantity: Math.max(0, item.quantity),
           }));
+          const historyEntries = [...plan.history];
+          const entryCreatedAt = new Date().toISOString();
+          const actorLabel = titleCase(currentUserRole);
+          const previousItemsByProductId = new Map(plan.items.map((item) => [item.productId, item]));
+          const nextItems = normalizedItems ?? plan.items;
+          const addedItems = nextItems.filter((item) => !previousItemsByProductId.has(item.productId));
+          const removedItems = plan.items.filter(
+            (item) => !nextItems.some((nextItem) => nextItem.productId === item.productId),
+          );
+
+          addedItems.forEach((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("plan-history"),
+              kind: "added",
+              title: `Added ${productName}`,
+              detail: `+${item.quantity} pcs • Source: ${getSourceLabel(source ?? plan.source)}`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
+          });
+
+          removedItems.forEach((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("plan-history"),
+              kind: "removed",
+              title: `Removed ${productName}`,
+              detail: `-${item.quantity} pcs • Source: ${getSourceLabel(source ?? plan.source)}`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
+          });
+
+          nextItems.forEach((item) => {
+            const previousItem = previousItemsByProductId.get(item.productId);
+            if (!previousItem || previousItem.quantity === item.quantity) {
+              return;
+            }
+
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("plan-history"),
+              kind: "edited",
+              title: `Edited quantity for ${productName}`,
+              detail: `${previousItem.quantity} → ${item.quantity} pcs`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
+          });
 
           return {
             ...plan,
@@ -473,12 +748,13 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
                 : notes === undefined
                   ? plan.notes
                   : undefined,
-            items: normalizedItems ?? plan.items,
+            items: nextItems,
+            history: historyEntries,
           };
         }),
       );
     },
-    [],
+    [currentUserRole, products],
   );
 
   const completeProductionPlan = useCallback(
@@ -492,6 +768,17 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
                 ...plan,
                 status: "completed",
                 completedAt,
+                history: [
+                  ...plan.history,
+                  createActivityEntry({
+                    id: makeId("plan-history"),
+                    kind: "completed",
+                    title: "Completed plan",
+                    detail: "Ready for export",
+                    actor: titleCase(currentUserRole),
+                    createdAt: completedAt,
+                  }),
+                ],
               }
             : plan,
         ),
@@ -668,182 +955,179 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
   const createBatch = useCallback(
     (input: CreateBatchInput) => {
-      const datePart = new Date().toISOString().slice(2, 10).replaceAll("-", "");
+      const createdAt = new Date().toISOString();
+      const actorLabel = titleCase(currentUserRole);
+      const initialItems = (input.items ?? []).map((item) => ({
+        id: makeId("line"),
+        productId: item.productId,
+        plannedQty: Math.max(0, item.plannedQty),
+        receivedQty: Math.max(0, item.receivedQty ?? item.plannedQty),
+        checked: false,
+      }));
       const batch: ProductionBatch = {
         id: makeId("batch"),
-        code: input.code?.trim() || `BAT-${datePart}-${String(batches.length + 1).padStart(2, "0")}`,
+        name: input.name?.trim() || `Batch ${batches.length + 1}`,
+        source: input.source,
         status: "draft",
-        assignedSource: input.assignedSource,
-        destinationStockKey: input.destinationStockKey,
-        notes: input.notes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        createdBy: currentUserRole,
-        items: input.items.map((item) => ({
-          id: makeId("line"),
-          productId: item.productId,
-          plannedQty: item.plannedQty,
-          receivedQtyConfirmed: 0,
-          note: item.note,
-        })),
+        notes: input.notes?.trim() || undefined,
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: actorLabel,
+        items: initialItems,
+        history: [
+          createActivityEntry({
+            id: makeId("batch-history"),
+            kind: "created",
+            title: "Created batch",
+            actor: actorLabel,
+            createdAt,
+          }),
+          ...initialItems.map((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            return createActivityEntry({
+              id: makeId("batch-history"),
+              kind: "added",
+              title: `Added ${productName}`,
+              detail: `+${item.receivedQty} pcs • Source: ${getSourceLabel(input.source)}`,
+              actor: actorLabel,
+              createdAt,
+            });
+          }),
+        ],
       };
 
       setBatches((current) => [batch, ...current]);
       pushToast({
         title: "Batch created",
-        description: `${batch.code} is ready for preparation.`,
+        description: `${batch.name} is ready for receiving updates.`,
         variant: "success",
       });
+
+      return batch;
     },
-    [batches.length, currentUserRole, pushToast],
+    [batches.length, currentUserRole, products, pushToast],
   );
 
-  const updateBatchDraft = useCallback(
+  const updateBatch = useCallback(
     (
       batchId: string,
-      patch: Partial<Pick<ProductionBatch, "assignedSource" | "destinationStockKey" | "notes">> & {
+      patch: Partial<Pick<ProductionBatch, "name" | "source" | "notes">> & {
         items?: BatchLine[];
       },
     ) => {
       setBatches((current) =>
-        current.map((batch) =>
-          batch.id === batchId
-            ? {
-                ...batch,
-                ...patch,
-                updatedAt: new Date().toISOString(),
-                items: patch.items ?? batch.items,
-              }
-            : batch,
-        ),
-      );
-      pushToast({
-        title: "Batch updated",
-        description: "Preparation details were saved.",
-      });
-    },
-    [pushToast],
-  );
-
-  const markBatchPrepared = useCallback(
-    (batchId: string) => {
-      setBatches((current) =>
-        current.map((batch) =>
-          batch.id === batchId
-            ? { ...batch, status: "prepared", updatedAt: new Date().toISOString() }
-            : batch,
-        ),
-      );
-      pushToast({
-        title: "Batch prepared",
-        description: "The batch is ready to move into receiving when items arrive.",
-      });
-    },
-    [pushToast],
-  );
-
-  const cancelBatch = useCallback(
-    (batchId: string) => {
-      setBatches((current) =>
-        current.map((batch) =>
-          batch.id === batchId
-            ? { ...batch, status: "cancelled", updatedAt: new Date().toISOString() }
-            : batch,
-        ),
-      );
-      pushToast({
-        title: "Batch cancelled",
-        description: "The operational record is kept, but no more receiving can happen from it.",
-        variant: "warning",
-      });
-    },
-    [pushToast],
-  );
-
-  const enterReceiving = useCallback(
-    (batchId: string) => {
-      setBatches((current) =>
-        current.map((batch) =>
-          batch.id === batchId
-            ? { ...batch, status: "receiving", updatedAt: new Date().toISOString() }
-            : batch,
-        ),
-      );
-      pushToast({
-        title: "Receiving mode started",
-        description: "You can now verify partials and post real stock updates from this batch.",
-      });
-    },
-    [pushToast],
-  );
-
-  const finalizeBatch = useCallback(
-    (batchId: string) => {
-      setBatches((current) =>
-        current.map((batch) =>
-          batch.id === batchId
-            ? { ...batch, status: "received", updatedAt: new Date().toISOString() }
-            : batch,
-        ),
-      );
-      pushToast({
-        title: "Batch finalized",
-        description: "The batch is now closed with its current actual receiving totals.",
-      });
-    },
-    [pushToast],
-  );
-
-  const receiveBatch = useCallback(
-    (batchId: string, lines: ReceiveLineInput[]) => {
-      const batch = batches.find((entry) => entry.id === batchId);
-      if (!batch) return;
-
-      const selected = new Map(lines.map((line) => [line.lineId, line.quantity]));
-      const createdAt = new Date().toISOString();
-      const stockDeltas = new Map<string, number>();
-
-      setBatches((current) =>
-        current.map((entry) => {
-          if (entry.id !== batchId) {
-            return entry;
+        current.map((batch) => {
+          if (batch.id !== batchId || batch.status === "completed") {
+            return batch;
           }
 
-          const nextItems = entry.items.map((item) => {
-            const receiveQty = selected.get(item.id);
-            if (!receiveQty || receiveQty <= 0) {
-              return item;
-            }
+          const nextItems = (patch.items ?? batch.items).map((item) => ({
+            ...item,
+            plannedQty: Math.max(0, item.plannedQty),
+            receivedQty: Math.max(0, item.receivedQty),
+            checked: Boolean(item.checked),
+          }));
+          const historyEntries = [...batch.history];
+          const entryCreatedAt = new Date().toISOString();
+          const actorLabel = titleCase(currentUserRole);
+          const previousItemsByProductId = new Map(
+            batch.items.map((item) => [item.productId, item]),
+          );
+          const addedItems = nextItems.filter((item) => !previousItemsByProductId.has(item.productId));
+          const removedItems = batch.items.filter(
+            (item) => !nextItems.some((nextItem) => nextItem.productId === item.productId),
+          );
 
-            stockDeltas.set(
-              item.productId,
-              (stockDeltas.get(item.productId) ?? 0) + receiveQty,
-            );
-
-            return {
-              ...item,
-              receivedQtyConfirmed: item.receivedQtyConfirmed + receiveQty,
-            };
+          addedItems.forEach((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("batch-history"),
+              kind: "added",
+              title: `Added ${productName}`,
+              detail: `+${item.receivedQty} pcs • Source: ${getSourceLabel(patch.source ?? batch.source)}`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
           });
 
-          const nextBatch = {
-            ...entry,
-            items: nextItems,
-            updatedAt: createdAt,
-          };
-          const totals = getBatchTotals(nextBatch);
+          removedItems.forEach((item) => {
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("batch-history"),
+              kind: "removed",
+              title: `Removed ${productName}`,
+              detail: `-${item.receivedQty} pcs • Source: ${getSourceLabel(patch.source ?? batch.source)}`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
+          });
+
+          nextItems.forEach((item) => {
+            const previousItem = previousItemsByProductId.get(item.productId);
+            if (!previousItem || previousItem.receivedQty === item.receivedQty) {
+              return;
+            }
+
+            const productName =
+              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+            historyEntries.push(createActivityEntry({
+              id: makeId("batch-history"),
+              kind: "edited",
+              title: `Edited quantity for ${productName}`,
+              detail: `${previousItem.receivedQty} → ${item.receivedQty} pcs`,
+              actor: actorLabel,
+              createdAt: entryCreatedAt,
+            }));
+          });
+          const hasChecklistProgress =
+            nextItems.some((item) => item.checked || item.receivedQty !== item.plannedQty) ||
+            (patch.items !== undefined && patch.items.length !== batch.items.length);
 
           return {
-            ...nextBatch,
-            status:
-              totals.received === 0
-                ? "receiving"
-                : totals.remaining === 0
-                  ? "received"
-                  : "partially_received",
+            ...batch,
+            name:
+              typeof patch.name === "string"
+                ? patch.name.trim() || batch.name
+                : batch.name,
+            source: patch.source ?? batch.source,
+            notes:
+              typeof patch.notes === "string"
+                ? patch.notes.trim() || undefined
+                : patch.notes === undefined
+                  ? batch.notes
+                  : undefined,
+            items: nextItems,
+            history: historyEntries,
+            status: hasChecklistProgress ? "in_progress" : "draft",
+            updatedAt: new Date().toISOString(),
           };
         }),
       );
+    },
+    [currentUserRole, products],
+  );
+
+  const completeBatch = useCallback(
+    (batchId: string) => {
+      const batch = batches.find((entry) => entry.id === batchId);
+      if (!batch || batch.status === "completed") return;
+
+      const createdAt = new Date().toISOString();
+      const stockDeltas = new Map<string, number>();
+
+      for (const item of batch.items) {
+        if (!item.checked || item.receivedQty <= 0) {
+          continue;
+        }
+
+        stockDeltas.set(
+          item.productId,
+          (stockDeltas.get(item.productId) ?? 0) + item.receivedQty,
+        );
+      }
 
       setProducts((current) =>
         current.map((product) => {
@@ -854,8 +1138,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
             ...product,
             currentStock: {
               ...product.currentStock,
-              [batch.destinationStockKey]:
-                product.currentStock[batch.destinationStockKey] + delta,
+              [batch.source]: product.currentStock[batch.source] + delta,
             },
             updatedAt: createdAt,
           };
@@ -863,33 +1146,65 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       );
 
       setMovements((current) => [
-        ...lines
-          .filter((line) => line.quantity > 0)
-          .map((line) => {
-            const batchLine = batch.items.find((item) => item.id === line.lineId);
-            return {
-              id: makeId("mv"),
-              productId: batchLine?.productId ?? "",
-              qtyDelta: line.quantity,
-              destinationStockKey: batch.destinationStockKey,
-              source: "production_batch_receive" as const,
-              createdAt,
-              actor: currentUserRole,
-              batchId,
-              reason: `Received through ${batch.code}`,
-            };
-          }),
+        ...batch.items
+          .filter((item) => item.checked && item.receivedQty > 0)
+          .map((item) => ({
+            id: makeId("mv"),
+            productId: item.productId,
+            qtyDelta: item.receivedQty,
+            destinationStockKey: batch.source,
+            source: "production_batch_receive" as const,
+            createdAt,
+            actor: currentUserRole,
+            batchId,
+            reason: `Received through ${batch.name}`,
+          })),
         ...current,
       ]);
 
+      setBatches((current) =>
+        current.map((entry) =>
+          entry.id === batchId
+            ? {
+                  ...entry,
+                  status: "completed",
+                  completedAt: createdAt,
+                  updatedAt: createdAt,
+                  history: [
+                    ...entry.history,
+                    createActivityEntry({
+                      id: makeId("batch-history"),
+                      kind: "completed",
+                      title: "Completed batch",
+                      detail: `Updated stock for ${getSourceLabel(entry.source)}`,
+                      actor: titleCase(currentUserRole),
+                      createdAt,
+                    }),
+                  ],
+                }
+            : entry,
+        ),
+      );
+
       syncTimestamp();
       pushToast({
-        title: "Stock received",
-        description: `${lines.length} selected line(s) updated ${batch.destinationStockKey} stock directly.`,
+        title: "Batch completed",
+        description: `Received quantities updated ${batch.source} stock directly.`,
         variant: "success",
       });
     },
     [batches, currentUserRole, pushToast, syncTimestamp],
+  );
+
+  const deleteBatch = useCallback(
+    (batchId: string) => {
+      setBatches((current) => current.filter((batch) => batch.id !== batchId));
+      pushToast({
+        title: "Batch deleted",
+        description: "The draft batch was removed.",
+      });
+    },
+    [pushToast],
   );
 
   const value = useMemo<MasterStockContextValue>(
@@ -922,45 +1237,40 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       updateThreshold,
       adjustStock,
       createBatch,
-      updateBatchDraft,
-      markBatchPrepared,
-      cancelBatch,
-      enterReceiving,
-      finalizeBatch,
-      receiveBatch,
+      updateBatch,
+      completeBatch,
+      deleteBatch,
       dismissToast,
     }),
     [
       adjustments,
       adjustStock,
       batches,
-      cancelBatch,
       categories,
       createProductionPlan,
       createBatch,
       createCategory,
       createProduct,
+      completeBatch,
       completeProductionPlan,
       updateProductionPlan,
       currentUserRole,
+      deleteBatch,
       deleteProductionPlan,
       dismissToast,
-      enterReceiving,
-      finalizeBatch,
       lastSyncedAt,
       moveCategory,
       movements,
       preferences,
       productionPlans,
       products,
-      receiveBatch,
       removeCategory,
       renameCategory,
       reorderCategory,
       toasts,
       updateProductPricing,
       archiveProduct,
-      updateBatchDraft,
+      updateBatch,
       updateThreshold,
     ],
   );

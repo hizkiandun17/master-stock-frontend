@@ -23,8 +23,34 @@ export function formatRelativeTime(isoString: string) {
   return `${hours} hours ago`;
 }
 
-export function titleCase(value: string) {
-  return value
+export function formatDate(isoString?: string) {
+  if (!isoString) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(isoString));
+}
+
+export function formatDateTime(isoString?: string) {
+  if (!isoString) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(isoString));
+}
+
+export function titleCase(value?: string) {
+  return (value ?? "")
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");

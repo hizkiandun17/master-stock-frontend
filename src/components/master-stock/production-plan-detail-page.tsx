@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, Download, Plus, Trash2, X } from "lucide-react";
+import { ArrowLeft, Check, Download, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { ActivityHistory } from "@/components/master-stock/activity-history";
+import { BatchItemPicker } from "@/components/master-stock/batch-item-picker";
 import { MasterStockShell } from "@/components/master-stock/shell";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +15,7 @@ import { useMasterStock } from "@/lib/master-stock-context";
 import { exportSingleProductionPlanPdf } from "@/lib/pdf-export";
 import { getCategoryName } from "@/lib/stock-helpers";
 import type { ProductionPlanItem } from "@/lib/types";
-import { cn, titleCase } from "@/lib/utils";
+import { cn, formatDate, formatDateTime, titleCase } from "@/lib/utils";
 
 export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   const {
@@ -24,17 +26,16 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     completeProductionPlan,
   } = useMasterStock();
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [pendingFocusProductId, setPendingFocusProductId] = useState<string | null>(null);
   const [isCompleteDialogOpen, setIsCompleteDialogOpen] = useState(false);
   const quantityInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
-  const pickerPanelRef = useRef<HTMLDivElement | null>(null);
 
   const plan = productionPlans.find((entry) => entry.id === planId);
+  const safeProducts = products ?? [];
+  const safeCategories = categories ?? [];
   const planItems = plan?.items ?? [];
+  const planHistory = plan?.history ?? [];
   const isDraft = plan?.status === "draft";
   const totalQuantity = planItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -42,32 +43,6 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     () => new Set(planItems.map((item) => item.productId)),
     [planItems],
   );
-
-  const filteredProducts = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return products.filter((product) => {
-      if (product.archived || selectedProductIds.has(product.id)) {
-        return false;
-      }
-
-      if (!query) {
-        return true;
-      }
-
-      return `${product.name} ${product.sku}`.toLowerCase().includes(query);
-    });
-  }, [products, search, selectedProductIds]);
-
-  useEffect(() => {
-    setHighlightedIndex((current) => {
-      if (filteredProducts.length === 0) {
-        return 0;
-      }
-
-      return Math.min(current, filteredProducts.length - 1);
-    });
-  }, [filteredProducts]);
 
   useEffect(() => {
     if (!pendingFocusProductId) {
@@ -94,58 +69,6 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     return () => window.cancelAnimationFrame(frame);
   }, [pendingFocusProductId, planItems]);
 
-  useEffect(() => {
-    if (!isAddItemOpen) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [isAddItemOpen]);
-
-  useEffect(() => {
-    if (!isAddItemOpen) {
-      return;
-    }
-
-    function handlePointerDown(event: MouseEvent | TouchEvent) {
-      const target = event.target as Node | null;
-      if (!target) {
-        return;
-      }
-
-      if (pickerPanelRef.current?.contains(target)) {
-        return;
-      }
-
-      if (addItemButtonRef.current?.contains(target)) {
-        return;
-      }
-
-      setIsAddItemOpen(false);
-    }
-
-    function handleWindowKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setIsAddItemOpen(false);
-      }
-    }
-
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("touchstart", handlePointerDown);
-    window.addEventListener("keydown", handleWindowKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("touchstart", handlePointerDown);
-      window.removeEventListener("keydown", handleWindowKeyDown);
-    };
-  }, [isAddItemOpen]);
-
   if (!plan) {
     return (
       <MasterStockShell currentPath="plans">
@@ -171,6 +94,10 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   const activePlan = plan;
+  const createdLabel = activePlan.createdAt ? `Created ${formatDate(activePlan.createdAt)}` : "Created -";
+  const completedLabel = activePlan.completedAt
+    ? `Completed ${formatDateTime(activePlan.completedAt)}`
+    : undefined;
 
   function replaceItems(nextItems: ProductionPlanItem[]) {
     updateProductionPlan({
@@ -180,13 +107,13 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   function addProduct(productId: string) {
-    replaceItems([...activePlan.items, { productId, quantity: 0 }]);
+    replaceItems([...planItems, { productId, quantity: 0 }]);
     setPendingFocusProductId(productId);
   }
 
   function updateQuantity(productId: string, value: string) {
     replaceItems(
-      activePlan.items.map((item) =>
+      planItems.map((item) =>
         item.productId === productId
           ? { ...item, quantity: Math.max(0, Number(value) || 0) }
           : item,
@@ -195,7 +122,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   function removeProduct(productId: string) {
-    replaceItems(activePlan.items.filter((item) => item.productId !== productId));
+    replaceItems(planItems.filter((item) => item.productId !== productId));
   }
 
   function handleCompletePlan() {
@@ -207,48 +134,36 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   function handleExport() {
     void exportSingleProductionPlanPdf({
       plan: activePlan,
-      products,
-      categories,
+      products: safeProducts,
+      categories: safeCategories,
     });
   }
 
-  function handlePickerKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (filteredProducts.length === 0) {
+  function focusNextQuantityInput(currentProductId: string) {
+    const currentIndex = planItems.findIndex((item) => item.productId === currentProductId);
+    if (currentIndex < 0) {
       return;
     }
 
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setHighlightedIndex((current) =>
-        Math.min(current + 1, filteredProducts.length - 1),
-      );
+    const nextItem = planItems[currentIndex + 1];
+    if (!nextItem) {
       return;
     }
 
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setHighlightedIndex((current) => Math.max(current - 1, 0));
+    const nextInput = quantityInputRefs.current.get(nextItem.productId);
+    if (!nextInput) {
       return;
     }
 
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const highlightedProduct = filteredProducts[highlightedIndex] ?? filteredProducts[0];
-      if (highlightedProduct) {
-        addProduct(highlightedProduct.id);
-      }
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setIsAddItemOpen(false);
-    }
+    window.requestAnimationFrame(() => {
+      nextInput.focus();
+      nextInput.select();
+    });
   }
 
   return (
     <MasterStockShell currentPath="plans">
-      <section className="space-y-6">
+      <section className="space-y-8 pb-24 md:pb-0">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3">
             <Link
@@ -262,8 +177,8 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
               <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{plan.name}</h1>
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span>
-                  {titleCase(plan.source)} • {plan.items.length} item
-                  {plan.items.length === 1 ? "" : "s"} • {totalQuantity} pcs
+                  {titleCase(plan.source)} • {planItems.length} item
+                  {planItems.length === 1 ? "" : "s"} • {totalQuantity} pcs
                 </span>
                 <span
                   className={cn(
@@ -273,16 +188,17 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                       : "bg-white text-black",
                   )}
                 >
-                  {plan.status}
+                  {titleCase(plan.status)}
                 </span>
               </div>
+              <p className="text-sm text-muted-foreground">{isDraft ? createdLabel : completedLabel ?? createdLabel}</p>
               {plan.notes ? (
                 <p className="text-sm text-muted-foreground">{plan.notes}</p>
               ) : null}
             </div>
           </div>
 
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <div className="hidden w-full flex-col gap-2 sm:w-auto sm:flex-row md:flex">
             {isDraft ? (
               <Button
                 onClick={() => setIsCompleteDialogOpen(true)}
@@ -301,100 +217,33 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
         </div>
 
         <Card className="border-white/10">
-          <CardContent className="space-y-4 p-4 md:p-5">
+          <CardContent className="space-y-5 p-4 md:p-5">
             {isDraft ? (
               <div className="relative">
                 <Button
                   ref={addItemButtonRef}
                   variant="outline"
                   onClick={() => setIsAddItemOpen((current) => !current)}
-                  className="min-h-11 w-full sm:w-auto"
+                  className="min-h-12 w-full sm:w-auto"
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
 
-                {isAddItemOpen ? (
-                  <div
-                    ref={pickerPanelRef}
-                    className="mt-3 rounded-2xl border border-white/10 bg-[#09090b] p-3 shadow-2xl sm:absolute sm:left-0 sm:top-full sm:z-20 sm:mt-2 sm:w-[520px]"
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-foreground">Add items to this plan</p>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setIsAddItemOpen(false)}
-                        className="min-h-11 px-3 text-muted-foreground hover:text-foreground"
-                        aria-label="Close add item picker"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-
-                    <Input
-                      ref={searchInputRef}
-                      value={search}
-                      onChange={(event) => {
-                        setSearch(event.target.value);
-                        setHighlightedIndex(0);
-                      }}
-                      onKeyDown={handlePickerKeyDown}
-                      placeholder="Search product or SKU..."
-                      className="h-11"
-                    />
-
-                    <div className="mt-3 max-h-[340px] space-y-2 overflow-y-auto pr-1">
-                      {filteredProducts.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-muted-foreground">
-                          No products match this search.
-                        </div>
-                      ) : (
-                        filteredProducts.map((product, index) => (
-                          <div
-                            key={product.id}
-                            className={cn(
-                              "flex items-start justify-between gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:bg-white/[0.03]",
-                              index === highlightedIndex
-                                ? "border-white/10 bg-white/[0.04]"
-                                : "",
-                            )}
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground">{product.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {product.sku} · {getCategoryName(product.categoryId, categories)}
-                              </p>
-                            </div>
-                            <Button
-                              variant="outline"
-                              onClick={() => addProduct(product.id)}
-                              className="min-h-11 shrink-0"
-                            >
-                              <Plus className="mr-2 h-4 w-4" />
-                              Add
-                            </Button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="mt-3 sm:hidden">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setIsAddItemOpen(false)}
-                        className="min-h-11 w-full"
-                      >
-                        Done
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                <BatchItemPicker
+                  open={isAddItemOpen}
+                  onOpenChange={setIsAddItemOpen}
+                  products={safeProducts}
+                  categories={safeCategories}
+                  selectedProductIds={selectedProductIds}
+                  onAdd={addProduct}
+                  title="Add items to this plan"
+                  triggerRef={addItemButtonRef}
+                />
               </div>
             ) : null}
 
-            {plan.items.length === 0 ? (
+            {planItems.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
                 {isDraft
                   ? "Add products to start building this plan."
@@ -402,21 +251,29 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
               </div>
             ) : (
               <div className="space-y-2">
-                {plan.items.map((item) => {
-                  const product = products.find((entry) => entry.id === item.productId);
+                {planItems.map((item) => {
+                  const product = safeProducts.find((entry) => entry.id === item.productId);
                   if (!product) return null;
 
                   return (
                     <div
                       key={item.productId}
-                      className="flex flex-col gap-3 rounded-2xl border border-white/10 px-4 py-4 md:flex-row md:items-center md:justify-between"
+                      className="flex flex-col gap-4 rounded-2xl border border-white/10 px-4 py-4"
                     >
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">{product.sku}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {product.sku} · {getCategoryName(product.categoryId, safeCategories)}
+                          </p>
+                        </div>
+                        <label className="space-y-2 text-sm">
+                          <span className="text-muted-foreground">Planned quantity</span>
+                          <p className="text-sm font-medium text-foreground">{item.quantity} pcs</p>
+                        </label>
                       </div>
 
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                         <label className="space-y-2 text-sm">
                           <span className="text-muted-foreground">Quantity</span>
                           <Input
@@ -425,7 +282,13 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                             inputMode="numeric"
                             value={String(item.quantity)}
                             onChange={(event) => updateQuantity(item.productId, event.target.value)}
-                            className="h-11 w-full sm:w-[120px]"
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                focusNextQuantityInput(item.productId);
+                              }
+                            }}
+                            className="h-12 w-full text-base sm:w-[140px]"
                             disabled={!isDraft}
                             ref={(node) => {
                               quantityInputRefs.current.set(item.productId, node);
@@ -437,7 +300,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                           <Button
                             variant="outline"
                             onClick={() => removeProduct(item.productId)}
-                            className="min-h-11 w-full sm:mt-6 sm:w-auto"
+                            className="min-h-12 w-full sm:w-auto"
                             aria-label={`Remove ${product.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -451,6 +314,11 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
             )}
           </CardContent>
         </Card>
+
+        <ActivityHistory
+          entries={planHistory}
+          description="Traceable audit trail for this production plan."
+        />
       </section>
 
       <Dialog
@@ -481,6 +349,23 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
       >
         {null}
       </Dialog>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/10 bg-background/95 p-4 backdrop-blur md:hidden">
+        {isDraft ? (
+          <Button
+            onClick={() => setIsCompleteDialogOpen(true)}
+            className="min-h-12 w-full"
+          >
+            <Check className="mr-2 h-4 w-4" />
+            Complete Plan
+          </Button>
+        ) : (
+          <Button onClick={handleExport} className="min-h-12 w-full">
+            <Download className="mr-2 h-4 w-4" />
+            Export PDF
+          </Button>
+        )}
+      </div>
     </MasterStockShell>
   );
 }

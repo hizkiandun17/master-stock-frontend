@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { BatchesPage } from "@/components/master-stock/batches-page";
 
 export default function BatchListRoute() {
-  redirect("/master-stock");
+  return <BatchesPage />;
 }

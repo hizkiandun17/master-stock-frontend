@@ -184,48 +184,92 @@ export const defaultProducts: Product[] = [
 export const defaultBatches: ProductionBatch[] = [
   {
     id: "batch-1",
-    code: "BAT-240415-01",
-    status: "prepared",
-    assignedSource: "Craftsman Arif",
-    destinationStockKey: "indira",
+    name: "Indira Ramadan Intake",
+    status: "draft",
+    source: "indira",
     notes: "Priority Ramadan replenishment",
     createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: defaultLastSyncedAt,
     createdBy: "Production Lead",
     items: [
-      { id: "line-1", productId: "prd-5", plannedQty: 20, receivedQtyConfirmed: 0 },
-      { id: "line-2", productId: "prd-10", plannedQty: 12, receivedQtyConfirmed: 0 }
-    ]
+      { id: "line-1", productId: "prd-5", plannedQty: 20, receivedQty: 20, checked: false },
+      { id: "line-2", productId: "prd-10", plannedQty: 12, receivedQty: 12, checked: false }
+    ],
+    history: [
+      {
+        id: "batch-1-history-1",
+        kind: "created",
+        title: "Created batch",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "batch-1-history-2",
+        kind: "added",
+        title: "Added Eid Mubarak Bracelet | Gold | Ramadhan Edition",
+        detail: "+20 pcs • Source: Indira",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "batch-1-history-3",
+        kind: "added",
+        title: "Added Noor Iftar Bracelet | Gold | Ramadhan Edition",
+        detail: "+12 pcs • Source: Indira",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
+      },
+    ],
   },
   {
     id: "batch-2",
-    code: "BAT-240414-02",
-    status: "partially_received",
-    assignedSource: "Workshop Nusa",
-    destinationStockKey: "warehouse",
+    name: "Mita Valentine Batch",
+    status: "in_progress",
+    source: "mita",
     notes: "Valentine backfill",
     createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: defaultLastSyncedAt,
     createdBy: "Production Lead",
     items: [
-      { id: "line-3", productId: "prd-4", plannedQty: 10, receivedQtyConfirmed: 5 },
-      { id: "line-4", productId: "prd-8", plannedQty: 8, receivedQtyConfirmed: 8 }
-    ]
+      { id: "line-3", productId: "prd-4", plannedQty: 10, receivedQty: 5, checked: true },
+      { id: "line-4", productId: "prd-8", plannedQty: 8, receivedQty: 8, checked: true }
+    ],
+    history: [
+      {
+        id: "batch-2-history-1",
+        kind: "created",
+        title: "Created batch",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "batch-2-history-2",
+        kind: "added",
+        title: "Added BABE Bracelet | Silver | Valentine's Day Edition",
+        detail: "+10 pcs • Source: Mita",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "batch-2-history-3",
+        kind: "added",
+        title: "Added Laylat al-Qadr Bracelet | Gold | Ramadhan Edition",
+        detail: "+8 pcs • Source: Mita",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 + 8 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "batch-2-history-4",
+        kind: "edited",
+        title: "Edited quantity for BABE Bracelet | Silver | Valentine's Day Edition",
+        detail: "10 → 5 pcs",
+        actor: "Production Lead",
+        createdAt: new Date(now.getTime() - 2.5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
   }
 ];
 
 export const defaultProductionPlans: ProductionPlan[] = [];
 
-export const defaultMovements: StockMovement[] = [
-  {
-    id: "mv-1",
-    productId: "prd-4",
-    qtyDelta: 5,
-    destinationStockKey: "warehouse",
-    source: "production_batch_receive",
-    createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
-    actor: "Production Lead",
-    batchId: "batch-2",
-    reason: "First partial receive"
-  }
-];
+export const defaultMovements: StockMovement[] = [];

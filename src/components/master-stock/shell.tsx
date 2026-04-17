@@ -20,7 +20,7 @@ export function MasterStockShell({
   currentPath,
   children,
 }: {
-  currentPath: "overview" | "plans";
+  currentPath: "overview" | "plans" | "batches";
   children: ReactNode;
 }) {
   const { currentUserRole, setCurrentUserRole } = useMasterStock();
@@ -80,27 +80,39 @@ export function MasterStockShell({
         </div>
       </header>
       <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6 md:py-10">
-        <div className="mb-6 inline-flex rounded-full border border-border bg-secondary p-1">
-          <Link
-            href="/master-stock"
-            className={
-              currentPath === "overview"
-                ? "rounded-full bg-accent px-4 py-2 text-sm text-foreground"
-                : "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            Overview
-          </Link>
-          <Link
-            href="/master-stock/plans"
-            className={
-              currentPath === "plans"
-                ? "rounded-full bg-accent px-4 py-2 text-sm text-foreground"
-                : "rounded-full px-4 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            Production Plans
-          </Link>
+        <div className="sticky top-0 z-30 -mx-4 mb-6 border-b border-white/5 bg-background/95 px-4 pb-3 pt-2 backdrop-blur md:-mx-6 md:px-6">
+          <div className="inline-flex w-fit max-w-full gap-2 overflow-x-auto rounded-full border border-border bg-secondary p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Link
+              href="/master-stock"
+              className={
+                currentPath === "overview"
+                  ? "whitespace-nowrap rounded-full bg-accent px-4 py-2.5 text-sm text-foreground"
+                  : "whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              Overview
+            </Link>
+            <Link
+              href="/master-stock/plans"
+              className={
+                currentPath === "plans"
+                  ? "whitespace-nowrap rounded-full bg-accent px-4 py-2.5 text-sm text-foreground"
+                  : "whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              Production Plans
+            </Link>
+            <Link
+              href="/master-stock/batches"
+              className={
+                currentPath === "batches"
+                  ? "whitespace-nowrap rounded-full bg-accent px-4 py-2.5 text-sm text-foreground"
+                  : "whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              Batches
+            </Link>
+          </div>
         </div>
         {children}
       </main>

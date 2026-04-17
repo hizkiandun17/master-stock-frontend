@@ -41,6 +41,7 @@ describe("Production plans", () => {
     expect(pushMock).toHaveBeenCalled();
     expect(screen.getByText(/Indira Week 3/i)).toBeInTheDocument();
     expect(screen.getByText(/0 pcs • 0 items/i)).toBeInTheDocument();
+    expect(screen.getByText(/Created \d{1,2} \w{3} \d{4}/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Delete Indira Week 3/i }),
     ).toBeInTheDocument();
@@ -72,7 +73,7 @@ describe("Production plans", () => {
       await screen.findByRole("heading", { name: /Indira April/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/^draft$/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Complete Plan/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Complete Plan/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Export PDF/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Add Item/i }));
@@ -86,13 +87,19 @@ describe("Production plans", () => {
     await user.type(quantityInput, "15");
     await waitFor(() => expect(quantityInput).toHaveValue(15));
 
-    await user.click(screen.getByRole("button", { name: /Complete Plan/i }));
+    await user.click(screen.getAllByRole("button", { name: /Complete Plan/i })[0]);
     expect(screen.getByText(/Mark this plan as complete\?/i)).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: /Complete Plan/i })[1]);
+    const completeButtons = screen.getAllByRole("button", { name: /Complete Plan/i });
+    await user.click(completeButtons[completeButtons.length - 1]);
 
-    expect(screen.getByText(/^completed$/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Complete Plan$/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Export PDF/i })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: /Export PDF/i }).length).toBeGreaterThan(0),
+    );
+    expect(screen.queryAllByRole("button", { name: /^Complete Plan$/i })).toHaveLength(0);
+    expect(screen.getByRole("heading", { name: /Activity History/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Show Activity/i }));
+    expect(screen.getAllByText(/Edited quantity for/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Completed plan/i)).toBeInTheDocument();
   });
 
   it("lets users close the add item picker with the visible close control", async () => {
@@ -119,7 +126,7 @@ describe("Production plans", () => {
     await user.click(await screen.findByRole("button", { name: /Add Item/i }));
     expect(screen.getByPlaceholderText(/Search product or SKU/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Close add item picker/i }));
+    await user.click(screen.getByRole("button", { name: /Close item picker/i }));
 
     await waitFor(() =>
       expect(screen.queryByPlaceholderText(/Search product or SKU/i)).not.toBeInTheDocument(),

@@ -753,14 +753,26 @@ export function OverviewPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button
-              onClick={openCreateModal}
-              className="min-h-11 w-full sm:w-auto"
-              aria-label="Add new stock"
-            >
-              <PackagePlus className="mr-2 h-4 w-4" />
-              Add New Stock
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Open add stock options"
+                className={cn(headerDropdownTriggerClassName)}
+              >
+                <PackagePlus className="mr-2 h-4 w-4" />
+                Add Stock
+                <ChevronDown className="ml-2 h-4 w-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={openCreateModal}>
+                  <PackagePlus className="h-4 w-4" />
+                  Add New Stock
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsManageCategoriesOpen(true)}>
+                  <PencilLine className="h-4 w-4" />
+                  Manage Categories
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

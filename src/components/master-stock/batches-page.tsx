@@ -4,90 +4,103 @@ import { useRouter } from "next/navigation";
 import { FilePlus2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { CreateProductionPlanDialog } from "@/components/master-stock/create-production-plan-dialog";
 import { MasterStockShell } from "@/components/master-stock/shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { useMasterStock } from "@/lib/master-stock-context";
+import { getBatchStatusLabel, getBatchTotals } from "@/lib/stock-helpers";
+import type { ProductionBatch } from "@/lib/types";
 import { cn, formatDate, titleCase } from "@/lib/utils";
 
-function getStatusClassName(status: "draft" | "completed") {
-  return status === "completed"
-    ? "bg-white text-black"
-    : "border border-white/10 text-muted-foreground";
+function getBatchName(batch: ProductionBatch) {
+  return batch.name?.trim() || `${titleCase(batch.source || "")} Batch`;
 }
 
-export function ProductionPlansPage() {
-  const router = useRouter();
-  const { productionPlans, deleteProductionPlan } = useMasterStock();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [planToDelete, setPlanToDelete] = useState<string | null>(null);
+function getStatusClassName(status: ProductionBatch["status"]) {
+  if (status === "completed") {
+    return "bg-white text-black";
+  }
 
-  const sortedPlans = useMemo(
+  if (status === "in_progress") {
+    return "border border-warning/30 text-warning";
+  }
+
+  return "border border-white/10 text-muted-foreground";
+}
+
+export function BatchesPage() {
+  const router = useRouter();
+  const { batches, deleteBatch } = useMasterStock();
+  const [batchToDelete, setBatchToDelete] = useState<string | null>(null);
+
+  const sortedBatches = useMemo(
     () =>
-      productionPlans
+      batches
         .slice()
         .sort(
           (left, right) =>
-            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+            new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime(),
         ),
-    [productionPlans],
+    [batches],
   );
 
   function confirmDelete() {
-    if (!planToDelete) return;
-    deleteProductionPlan(planToDelete);
-    setPlanToDelete(null);
+    if (!batchToDelete) return;
+    deleteBatch(batchToDelete);
+    setBatchToDelete(null);
   }
 
   return (
-    <MasterStockShell currentPath="plans">
+    <MasterStockShell currentPath="batches">
       <section className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              Production Plans
-            </h1>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Batches</h1>
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-              Plan incoming stock without affecting real inventory.
+              Track incoming stock from production.
             </p>
           </div>
 
-          <Button onClick={() => setIsCreateOpen(true)} className="min-h-12 w-full sm:w-auto">
+          <Button
+            onClick={() => router.push("/master-stock/batches/new")}
+            className="min-h-12 w-full sm:w-auto"
+          >
             <FilePlus2 className="mr-2 h-4 w-4" />
-            Create New Plan
+            Create Batch
           </Button>
         </div>
 
-        {sortedPlans.length === 0 ? (
+        {sortedBatches.length === 0 ? (
           <Card className="border-white/10">
             <CardContent className="px-5 py-12 text-center">
-              <h2 className="text-lg font-semibold text-foreground">No production plans yet</h2>
+              <h2 className="text-lg font-semibold text-foreground">No batches yet</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create a plan to organize incoming stock from Indira or Mita without touching
-                real inventory.
+                Create a batch to track what production planned and what actually arrived.
               </p>
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {sortedPlans.map((plan) => {
-              const totalQuantity = plan.items.reduce((sum, item) => sum + item.quantity, 0);
-              const sourceLabel = titleCase(plan.source) || "-";
-              const createdLabel = plan.createdAt ? `Created ${formatDate(plan.createdAt)}` : "Created -";
+            {sortedBatches.map((batch) => {
+              const totals = getBatchTotals(batch);
+              const sourceLabel = titleCase(batch.source || "") || "-";
+              const createdLabel = batch.createdAt
+                ? `Created ${formatDate(batch.createdAt)}`
+                : "Created -";
+              const itemCount = Array.isArray(batch.items) ? batch.items.length : 0;
 
               return (
                 <div
-                  key={plan.id}
-                  onClick={() => router.push(`/master-stock/plans/${plan.id}`)}
+                  key={batch.id}
+                  onClick={() => router.push(`/master-stock/batches/${batch.id}`)}
                   className="group rounded-[20px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      router.push(`/master-stock/plans/${plan.id}`);
+                      router.push(`/master-stock/batches/${batch.id}`);
                     }
                   }}
                 >
@@ -95,43 +108,48 @@ export function ProductionPlansPage() {
                     <CardContent className="space-y-4 p-4 md:p-5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="space-y-2">
-                          <p className="text-base font-semibold text-foreground">{plan.name}</p>
+                          <p className="text-base font-semibold text-foreground">
+                            {getBatchName(batch)}
+                          </p>
                           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                             {sourceLabel}
                           </p>
                         </div>
+
                         <div className="flex items-center gap-2">
                           <span
                             className={cn(
                               "rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em]",
-                              getStatusClassName(plan.status),
+                              getStatusClassName(batch.status),
                             )}
                           >
-                            {titleCase(plan.status)}
+                            {getBatchStatusLabel(batch.status)}
                           </span>
-                        <button
-                          type="button"
-                          aria-label={`Delete ${plan.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPlanToDelete(plan.id);
-                          }}
-                          className="rounded-full p-2.5 text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                          {batch.status === "draft" ? (
+                            <button
+                              type="button"
+                              aria-label={`Delete ${getBatchName(batch)}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setBatchToDelete(batch.id);
+                              }}
+                              className="rounded-full p-2.5 text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          ) : null}
                         </div>
                       </div>
 
                       <div className="space-y-2 text-sm text-muted-foreground">
                         <p>
-                          {totalQuantity} pcs • {plan.items.length} item
-                          {plan.items.length === 1 ? "" : "s"}
+                          {totals.planned} pcs • {itemCount} item
+                          {itemCount === 1 ? "" : "s"}
                         </p>
                         <p>{createdLabel}</p>
                       </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
                 </div>
               );
             })}
@@ -139,21 +157,15 @@ export function ProductionPlansPage() {
         )}
       </section>
 
-      <CreateProductionPlanDialog
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        onCreated={(planId) => router.push(`/master-stock/plans/${planId}`)}
-      />
-
       <Dialog
-        open={planToDelete !== null}
+        open={batchToDelete !== null}
         onOpenChange={(open) => {
           if (!open) {
-            setPlanToDelete(null);
+            setBatchToDelete(null);
           }
         }}
-        title="Delete plan?"
-        description="This will permanently remove the selected production plan."
+        title="Delete batch?"
+        description="This will permanently remove the selected draft batch."
         className="border-white/10 bg-[#09090b] md:max-w-md"
         headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
         bodyClassName="hidden"
@@ -161,7 +173,7 @@ export function ProductionPlansPage() {
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button
               variant="outline"
-              onClick={() => setPlanToDelete(null)}
+              onClick={() => setBatchToDelete(null)}
               className="min-h-11 w-full sm:w-auto"
             >
               Cancel
@@ -171,7 +183,7 @@ export function ProductionPlansPage() {
               onClick={confirmDelete}
               className="min-h-11 w-full sm:w-auto"
             >
-              Delete Plan
+              Delete Batch
             </Button>
           </div>
         }

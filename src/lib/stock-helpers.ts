@@ -46,11 +46,11 @@ export function getOpenBatchQuantity(
   batches: ProductionBatch[],
 ) {
   return batches
-    .filter((batch) => batch.status !== "received" && batch.status !== "cancelled")
+    .filter((batch) => batch.status !== "completed")
     .flatMap((batch) => batch.items)
     .filter((item) => item.productId === productId)
     .reduce(
-      (sum, item) => sum + Math.max(0, item.plannedQty - item.receivedQtyConfirmed),
+      (sum, item) => sum + Math.max(0, item.plannedQty - item.receivedQty),
       0,
     );
 }
@@ -58,7 +58,7 @@ export function getOpenBatchQuantity(
 export function getBatchTotals(batch: ProductionBatch) {
   const planned = batch.items.reduce((sum, item) => sum + item.plannedQty, 0);
   const received = batch.items.reduce(
-    (sum, item) => sum + item.receivedQtyConfirmed,
+    (sum, item) => sum + item.receivedQty,
     0,
   );
 
@@ -66,13 +66,13 @@ export function getBatchTotals(batch: ProductionBatch) {
 }
 
 export function getBatchStatusLabel(status: BatchStatus) {
-  return status.replaceAll("_", " ");
+  if (status === "in_progress") {
+    return "In Progress";
+  }
+
+  return status === "completed" ? "Completed" : "Draft";
 }
 
 export function isBatchEditable(status: BatchStatus) {
-  return status === "draft" || status === "prepared";
-}
-
-export function canReceiveBatch(status: BatchStatus) {
-  return status === "prepared" || status === "receiving" || status === "partially_received";
+  return status !== "completed";
 }
