@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ActivityHistory } from "@/components/master-stock/activity-history";
 import { BatchItemPicker } from "@/components/master-stock/batch-item-picker";
@@ -47,6 +47,14 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const plannedInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  function isMobilePickerViewport() {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 639px)").matches
+    );
+  }
+
   const batch = batches.find((entry) => entry.id === batchId);
   const editable = batch ? isBatchEditable(batch.status) : false;
 
@@ -54,6 +62,31 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     () => new Set(batch?.items.map((item) => item.productId) ?? []),
     [batch?.items],
   );
+
+  useEffect(() => {
+    if (!batch || !pendingFocusProductId.current) {
+      return;
+    }
+
+    const quantityInput = plannedInputRefs.current.get(pendingFocusProductId.current);
+    if (!quantityInput) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      if (typeof quantityInput.scrollIntoView === "function") {
+        quantityInput.scrollIntoView({
+          block: "center",
+          behavior: "smooth",
+        });
+      }
+      quantityInput.focus({ preventScroll: true });
+      quantityInput.select();
+      pendingFocusProductId.current = null;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [batch, batch?.items, searchQuery]);
 
   if (!batch) {
     return (
@@ -107,6 +140,15 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   }
 
   function addProduct(productId: string) {
+    const existingItem = activeBatch.items.find((item) => item.productId === productId);
+    if (existingItem) {
+      pendingFocusProductId.current = productId;
+      if (isMobilePickerViewport()) {
+        setIsPickerOpen(false);
+      }
+      return;
+    }
+
     replaceItems([
       ...activeBatch.items,
       {
@@ -118,6 +160,9 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       },
     ]);
     pendingFocusProductId.current = productId;
+    if (isMobilePickerViewport()) {
+      setIsPickerOpen(false);
+    }
   }
 
   function updateItem(
@@ -328,13 +373,6 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                             <Input
                               ref={(node) => {
                                 plannedInputRefs.current.set(item.productId, node);
-                                if (pendingFocusProductId.current === item.productId && node) {
-                                  window.requestAnimationFrame(() => {
-                                    node.focus();
-                                    node.select();
-                                    pendingFocusProductId.current = null;
-                                  });
-                                }
                               }}
                               type="number"
                               min="0"

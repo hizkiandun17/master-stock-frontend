@@ -39,7 +39,7 @@ export function BatchItemPicker({
     const query = search.trim().toLowerCase();
 
     return products.filter((product) => {
-      if (product.archived || selectedProductIds.has(product.id)) {
+      if (product.archived) {
         return false;
       }
 
@@ -193,29 +193,35 @@ export function BatchItemPicker({
               </div>
             ) : (
               filteredProducts.map((product, index) => (
-                <div
-                  key={product.id}
-                  className={cn(
-                    "flex items-start justify-between gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:bg-white/[0.03]",
-                    index === highlightedIndex ? "border-white/10 bg-white/[0.04]" : "",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{product.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {product.sku} · {getCategoryName(product.categoryId, categories)}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onAdd(product.id)}
-                    className="min-h-11 shrink-0 px-4"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add
-                  </Button>
-                </div>
+                (() => {
+                  const isSelected = selectedProductIds.has(product.id);
+
+                  return (
+                    <div
+                      key={product.id}
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:bg-white/[0.03]",
+                        index === highlightedIndex ? "border-white/10 bg-white/[0.04]" : "",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {product.sku} · {getCategoryName(product.categoryId, categories)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => onAdd(product.id)}
+                        className="min-h-11 shrink-0 px-4"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        {isSelected ? "Focus qty" : "Add"}
+                      </Button>
+                    </div>
+                  );
+                })()
               ))
             )}
           </div>

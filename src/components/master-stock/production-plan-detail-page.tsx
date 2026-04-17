@@ -30,6 +30,14 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   const quantityInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
 
+  function isMobilePickerViewport() {
+    return (
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 639px)").matches
+    );
+  }
+
   const plan = productionPlans.find((entry) => entry.id === planId);
   const safeProducts = products ?? [];
   const safeCategories = categories ?? [];
@@ -54,14 +62,14 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     }
 
     const frame = window.requestAnimationFrame(() => {
-      quantityInput.focus();
-      quantityInput.select();
       if (typeof quantityInput.scrollIntoView === "function") {
         quantityInput.scrollIntoView({
-          block: "nearest",
+          block: "center",
           behavior: "smooth",
         });
       }
+      quantityInput.focus({ preventScroll: true });
+      quantityInput.select();
       setPendingFocusProductId(null);
     });
 
@@ -106,8 +114,20 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   function addProduct(productId: string) {
+    const existingItem = planItems.find((item) => item.productId === productId);
+    if (existingItem) {
+      setPendingFocusProductId(productId);
+      if (isMobilePickerViewport()) {
+        setIsAddItemOpen(false);
+      }
+      return;
+    }
+
     replaceItems([...planItems, { productId, plannedQty: 0, quantity: 0 }]);
     setPendingFocusProductId(productId);
+    if (isMobilePickerViewport()) {
+      setIsAddItemOpen(false);
+    }
   }
 
   function updateQuantity(productId: string, value: string) {
