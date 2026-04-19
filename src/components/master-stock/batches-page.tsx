@@ -57,25 +57,14 @@ export function BatchesPage() {
 
   return (
     <MasterStockShell currentPath="production-batch">
-      {currentUserRole === "production" ? (
-        <section className="space-y-4">
-          <Card className="border-white/10">
-            <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Production Batch is internal-only</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Craftsman reports are already saved in the system. Internal users receive, verify,
-                and complete them here.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      ) : (
       <section className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Production Batch</h1>
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-              Craftsman submissions already saved in the system, ready for internal receiving and stock updates.
+              {currentUserRole === "production"
+                ? "Create or continue a batch and enter quantities quickly from your phone."
+                : "Craftsman submissions already saved in the system, ready for internal receiving and stock updates."}
             </p>
           </div>
 
@@ -84,7 +73,7 @@ export function BatchesPage() {
             className="min-h-12 w-full sm:w-auto"
           >
             <FilePlus2 className="mr-2 h-4 w-4" />
-            Create Production Batch
+            {currentUserRole === "production" ? "New Batch" : "Create Production Batch"}
           </Button>
         </div>
 
@@ -173,7 +162,6 @@ export function BatchesPage() {
           </div>
         )}
       </section>
-      )}
 
       <Dialog
         open={batchToDelete !== null}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, PackagePlus, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, PackagePlus, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ActivityHistory } from "@/components/master-stock/activity-history";
@@ -18,6 +18,8 @@ import { useMasterStock } from "@/lib/master-stock-context";
 import { getBatchStatusLabel, getBatchTotals, getCategoryName } from "@/lib/stock-helpers";
 import type { BatchPlannedItem, Product } from "@/lib/types";
 import { cn, formatDate, formatDateTime, titleCase } from "@/lib/utils";
+
+const longPressDurationMs = 650;
 
 function getProductionBatchName(name: string | undefined, source: string) {
   return name?.trim() || `${titleCase(source || "")} Production Batch`;
@@ -85,9 +87,12 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const [customItemName, setCustomItemName] = useState("");
   const [customItemQuantity, setCustomItemQuantity] = useState("0");
   const [customItemNote, setCustomItemNote] = useState("");
+  const [mobileSearch, setMobileSearch] = useState("");
   const quantityInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const pendingFocusItemId = useRef<string | null>(null);
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const removeTimeoutRef = useRef<number | null>(null);
 
   const incoming = batches.find((entry) => entry.id === batchId);
   const safeProducts = products ?? [];
@@ -100,6 +105,21 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       ),
     [incomingItems],
   );
+  const filteredMobileProducts = useMemo(() => {
+    const query = mobileSearch.trim().toLowerCase();
+
+    return safeProducts.filter((product) => {
+      if (product.archived) {
+        return false;
+      }
+
+      if (!query) {
+        return false;
+      }
+
+      return `${product.name} ${product.sku}`.toLowerCase().includes(query);
+    });
+  }, [mobileSearch, safeProducts]);
 
   useEffect(() => {
     if (!pendingFocusItemId.current) {
@@ -123,6 +143,37 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     return () => window.cancelAnimationFrame(frame);
   }, [incomingItems]);
 
+  useEffect(() => {
+    if (incoming?.status !== "draft" || incomingItems.length > 0) {
+      return;
+    }
+
+    const activeElement = document.activeElement;
+    if (
+      activeElement instanceof HTMLElement &&
+      (activeElement.tagName === "INPUT" ||
+        activeElement.tagName === "TEXTAREA" ||
+        activeElement.tagName === "SELECT" ||
+        activeElement.isContentEditable)
+    ) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      mobileSearchInputRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [incoming?.status, incomingItems.length]);
+
+  useEffect(() => {
+    return () => {
+      if (removeTimeoutRef.current) {
+        window.clearTimeout(removeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (!incoming) {
     return (
       <MasterStockShell currentPath="production-batch">
@@ -139,23 +190,6 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
               <h1 className="text-xl font-semibold text-foreground">Production batch not found</h1>
               <p className="mt-2 text-sm text-muted-foreground">
                 This production batch no longer exists or has not been created yet.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      </MasterStockShell>
-    );
-  }
-
-  if (currentUserRole === "production") {
-    return (
-      <MasterStockShell currentPath="production-batch">
-        <section className="space-y-4">
-          <Card className="border-white/10">
-            <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Production Batch is internal-only</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Internal users receive craftsman reports, verify them, and update stock from this page.
               </p>
             </CardContent>
           </Card>
@@ -188,12 +222,28 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     });
   }
 
+  function focusIncomingInput(itemId: string) {
+    const input = quantityInputRefs.current.get(itemId);
+    if (!input) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      if (typeof input.scrollIntoView === "function") {
+        input.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+      input.focus({ preventScroll: true });
+      input.select();
+    });
+  }
+
   function addProduct(productId: string) {
     const existingItem = incomingItems.find(
       (item) => !item.isCustom && (item.productId === productId || item.mappedProductId === productId),
     );
     if (existingItem) {
       pendingFocusItemId.current = existingItem.id;
+      setMobileSearch("");
       return;
     }
 
@@ -205,6 +255,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     };
     replaceItems([...incomingItems, nextItem]);
     pendingFocusItemId.current = nextItem.id;
+    setMobileSearch("");
   }
 
   function addCustomItem() {
@@ -246,6 +297,41 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
 
   function removeItem(itemId: string) {
     replaceItems(incomingItems.filter((item) => item.id !== itemId));
+  }
+
+  function focusNextIncomingInput(currentItemId: string) {
+    const currentIndex = incomingItems.findIndex((item) => item.id === currentItemId);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextItem = incomingItems[currentIndex + 1];
+    if (!nextItem?.id) {
+      quantityInputRefs.current.get(currentItemId)?.blur();
+      return;
+    }
+
+    focusIncomingInput(nextItem.id);
+  }
+
+  function scheduleMobileRemove(itemId: string) {
+    if (removeTimeoutRef.current) {
+      window.clearTimeout(removeTimeoutRef.current);
+    }
+
+    removeTimeoutRef.current = window.setTimeout(() => {
+      removeItem(itemId);
+      removeTimeoutRef.current = null;
+    }, longPressDurationMs);
+  }
+
+  function clearScheduledRemove() {
+    if (!removeTimeoutRef.current) {
+      return;
+    }
+
+    window.clearTimeout(removeTimeoutRef.current);
+    removeTimeoutRef.current = null;
   }
 
   function renderVerificationRows() {
@@ -331,6 +417,350 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
           );
         })}
       </div>
+    );
+  }
+
+  if (currentUserRole === "production") {
+    const isEditableDraft = activeIncoming.status === "draft";
+    const itemCount = incomingItems.length;
+    const totalQuantity = incomingItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    return (
+      <MasterStockShell currentPath="production-batch">
+        <section className="space-y-6 pb-28 md:pb-0">
+          <div className="space-y-3">
+            <Link
+              href="/master-stock/incoming"
+              className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Link>
+
+            <div className="space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+                    {getProductionBatchName(activeIncoming.name, activeIncoming.source)}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {getBatchStatusLabel(activeIncoming.status)} • {itemCount} item
+                    {itemCount === 1 ? "" : "s"} • {totalQuantity} pcs
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.18em]",
+                    getStatusClassName(activeIncoming.status),
+                  )}
+                >
+                  {getBatchStatusLabel(activeIncoming.status)}
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">{currentStageLabel}</p>
+            </div>
+          </div>
+
+          <Card className="border-white/10">
+            <CardContent className="space-y-4 p-4 md:p-5">
+              <label className="space-y-2 text-sm">
+                <span className="text-foreground">Batch Name</span>
+                <Input
+                  value={activeIncoming.name ?? ""}
+                  onChange={(event) =>
+                    updateIncoming({
+                      incomingId: activeIncoming.id,
+                      name: event.target.value,
+                    })
+                  }
+                  placeholder="Optional batch name"
+                  className="h-11"
+                  disabled={!isEditableDraft}
+                />
+              </label>
+            </CardContent>
+          </Card>
+
+          {isEditableDraft ? (
+            <>
+              <div className="space-y-4 md:hidden">
+                <Card className="border-white/10">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        ref={mobileSearchInputRef}
+                        value={mobileSearch}
+                        onChange={(event) => setMobileSearch(event.target.value)}
+                        placeholder="Search or add item..."
+                        className="h-14 pl-11 text-base"
+                      />
+                    </div>
+
+                    {mobileSearch.trim() ? (
+                      <div className="space-y-2">
+                        {filteredMobileProducts.length === 0 ? (
+                          <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-muted-foreground">
+                            No items match this search.
+                          </div>
+                        ) : (
+                          filteredMobileProducts.slice(0, 8).map((product) => {
+                            const categoryName = getCategoryName(product.categoryId, safeCategories);
+                            const isAdded = selectedProductIds.has(product.id);
+
+                            return (
+                              <button
+                                key={product.id}
+                                type="button"
+                                onClick={() => addProduct(product.id)}
+                                className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 py-3 text-left transition-colors hover:bg-white/[0.03]"
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {product.name}
+                                  </p>
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {product.sku} • {categoryName}
+                                  </p>
+                                </div>
+                                <span className="text-sm text-muted-foreground">
+                                  {isAdded ? "Focus" : "Add"}
+                                </span>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                {incomingItems.length === 0 ? (
+                  <Card className="border-white/10">
+                    <CardContent className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      Search above to add the first item to this batch.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-4">
+                    {incomingItems.map((item) => {
+                      const itemName = getIncomingItemName(item, safeProducts);
+                      const itemMeta = getIncomingItemMeta(item, safeProducts);
+
+                      return (
+                        <Card
+                          key={item.id}
+                          className={cn("border-white/10", item.isCustom ? "bg-white/[0.02]" : "")}
+                          onTouchStart={() => scheduleMobileRemove(item.id)}
+                          onTouchEnd={clearScheduledRemove}
+                          onTouchCancel={clearScheduledRemove}
+                        >
+                          <CardContent className="space-y-3 p-4">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-base font-medium text-foreground">{itemName}</p>
+                                {item.isCustom ? (
+                                  <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                    Custom
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{itemMeta}</p>
+                            </div>
+                            <Input
+                              ref={(node) => {
+                                quantityInputRefs.current.set(item.id, node);
+                                if (pendingFocusItemId.current === item.id && node) {
+                                  window.requestAnimationFrame(() => {
+                                    node.scrollIntoView({ block: "center", behavior: "smooth" });
+                                    node.focus();
+                                    node.select();
+                                    pendingFocusItemId.current = null;
+                                  });
+                                }
+                              }}
+                              type="number"
+                              min="0"
+                              inputMode="numeric"
+                              enterKeyHint="next"
+                              value={String(item.quantity)}
+                              onChange={(event) =>
+                                updateItem(item.id, { quantity: Number(event.target.value) || 0 })
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  focusNextIncomingInput(item.id);
+                                }
+                              }}
+                              className="h-14 text-lg"
+                              aria-label={`Quantity for ${itemName}`}
+                            />
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden md:block">
+                <Card className="border-white/10">
+                  <CardContent className="space-y-5 p-4 md:p-5">
+                    <div className="relative">
+                      <Button
+                        ref={addItemButtonRef}
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsAddItemOpen((current) => !current)}
+                        className="min-h-12 w-full sm:w-auto"
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Item
+                      </Button>
+
+                      <BatchItemPicker
+                        open={isAddItemOpen}
+                        onOpenChange={setIsAddItemOpen}
+                        products={safeProducts}
+                        categories={safeCategories}
+                        selectedProductIds={selectedProductIds}
+                        onAdd={addProduct}
+                        title="Add item to this production batch"
+                        triggerRef={addItemButtonRef}
+                      />
+                    </div>
+
+                    {incomingItems.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                        Add items to start filling this production batch.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {incomingItems.map((item) => {
+                          const itemName = getIncomingItemName(item, safeProducts);
+                          const itemMeta = getIncomingItemMeta(item, safeProducts);
+
+                          return (
+                            <div
+                              key={item.id}
+                              className={cn(
+                                "flex items-center justify-between gap-4 rounded-2xl border border-white/10 px-4 py-4",
+                                item.isCustom ? "bg-white/[0.02]" : "",
+                              )}
+                            >
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium text-foreground">{itemName}</p>
+                                  {item.isCustom ? (
+                                    <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                      Custom
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="text-xs text-muted-foreground">{itemMeta}</p>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  ref={(node) => {
+                                    quantityInputRefs.current.set(item.id, node);
+                                    if (pendingFocusItemId.current === item.id && node) {
+                                      window.requestAnimationFrame(() => {
+                                        node.focus();
+                                        node.select();
+                                        pendingFocusItemId.current = null;
+                                      });
+                                    }
+                                  }}
+                                  type="number"
+                                  min="0"
+                                  inputMode="numeric"
+                                  value={String(item.quantity)}
+                                  onChange={(event) =>
+                                    updateItem(item.id, {
+                                      quantity: Number(event.target.value) || 0,
+                                    })
+                                  }
+                                  className="h-12 w-[148px] text-base"
+                                  aria-label={`Quantity for ${itemName}`}
+                                />
+                                <Button
+                                  variant="outline"
+                                  onClick={() => removeItem(item.id)}
+                                  className="min-h-12 px-3"
+                                  aria-label={`Remove ${itemName}`}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          ) : (
+            <Card className="border-white/10">
+              <CardContent className="space-y-4 p-4 md:p-5">
+                <div className="space-y-1">
+                  <h2 className="text-lg font-semibold text-foreground">Submitted summary</h2>
+                  <p className="text-sm text-muted-foreground">
+                    This batch has already been submitted and is waiting for internal receiving.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {incomingItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={cn(
+                        "rounded-2xl border border-white/10 px-4 py-4",
+                        item.isCustom ? "bg-white/[0.02]" : "",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {getIncomingItemName(item, safeProducts)}
+                        </p>
+                        {item.isCustom ? (
+                          <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                            Custom
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {getIncomingItemMeta(item, safeProducts)}
+                      </p>
+                      <p className="mt-3 text-sm text-foreground">{item.quantity} pcs</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </section>
+
+        {isEditableDraft ? (
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Total</p>
+                <p className="text-lg font-semibold text-foreground">{totalQuantity} pcs</p>
+              </div>
+              <Button
+                onClick={() => submitIncoming(activeIncoming.id)}
+                className="min-h-12 flex-1"
+                disabled={incomingItems.length === 0}
+              >
+                Submit Batch
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </MasterStockShell>
     );
   }
 

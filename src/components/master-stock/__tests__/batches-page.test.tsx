@@ -47,10 +47,8 @@ describe("Production Batch", () => {
     renderWithProviders(<CreateBatchPage />);
 
     await user.type(screen.getByRole("textbox", { name: /Batch Name/i }), "Friday Return");
-    await user.selectOptions(screen.getByRole("combobox", { name: /Source/i }), "mita");
-    await user.click(screen.getByRole("button", { name: /Add Item/i }));
-    await user.type(screen.getByPlaceholderText(/Search product or SKU/i), "4EVER");
-    await user.keyboard("{Enter}");
+    await user.type(screen.getByPlaceholderText(/Search or add item/i), "4EVER");
+    await user.click(await screen.findByRole("button", { name: /4EVER Bracelet/i }));
 
     const quantityInput = await screen.findByDisplayValue("0");
     await waitFor(() => expect(quantityInput).toHaveFocus());
@@ -166,7 +164,8 @@ describe("Production Batch", () => {
     });
   });
 
-  it("blocks production users from the internal production batch detail", async () => {
+  it("shows a simplified draft input flow for production users", async () => {
+    const user = userEvent.setup();
     window.localStorage.clear();
     window.localStorage.setItem(
       "master-stock-state-v2",
@@ -190,6 +189,13 @@ describe("Production Batch", () => {
 
     renderWithProviders(<BatchDetailPage batchId="incoming-11" />);
 
-    expect(await screen.findByText(/Production Batch is internal-only/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Craftsman Return/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Search or add item/i)).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText(/Search or add item/i), "Noor");
+    await user.click(await screen.findByRole("button", { name: /Noor Iftar Bracelet/i }));
+
+    const quantityInput = await screen.findByLabelText(/Quantity for Noor Iftar Bracelet/i);
+    await waitFor(() => expect(quantityInput).toHaveFocus());
   });
 });
