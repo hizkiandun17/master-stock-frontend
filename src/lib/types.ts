@@ -3,7 +3,7 @@ export type StockStatus = "healthy" | "low" | "out";
 export type StockLocationKey = "indira" | "mita" | "warehouse";
 export type ProductionPlanSource = "indira" | "mita";
 export type ProductionPlanStatus = "draft" | "completed";
-export type BatchStatus = "draft" | "in_progress" | "completed";
+export type BatchStatus = "draft" | "submitted" | "receiving" | "completed";
 export type ActivityKind = "created" | "added" | "removed" | "edited" | "completed";
 
 export interface Category {
@@ -64,13 +64,15 @@ export interface ProductionPlan {
   history: ActivityEntry[];
 }
 
-export interface BatchLine {
+export interface BatchPlannedItem {
   id: string;
-  productId: string;
-  plannedQty: number;
-  receivedQty: number;
-  checked: boolean;
+  productId?: string;
+  isCustom?: boolean;
+  customName?: string;
   note?: string;
+  mappedProductId?: string;
+  checked?: boolean;
+  quantity: number;
 }
 
 export interface ProductionBatch {
@@ -82,8 +84,10 @@ export interface ProductionBatch {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+  submittedAt?: string;
+  receivingAt?: string;
   completedAt?: string;
-  items: BatchLine[];
+  items: BatchPlannedItem[];
   history: ActivityEntry[];
 }
 
@@ -126,9 +130,13 @@ export interface CreateBatchInput {
   source: StockLocationKey;
   notes?: string;
   items?: Array<{
-    productId: string;
-    plannedQty: number;
-    receivedQty?: number;
+    productId?: string;
+    isCustom?: boolean;
+    customName?: string;
+    note?: string;
+    mappedProductId?: string;
+    checked?: boolean;
+    quantity: number;
   }>;
 }
 

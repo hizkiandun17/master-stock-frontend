@@ -1,4 +1,4 @@
-import { BatchDetailPage } from "@/components/master-stock/batch-detail-page";
+import { ProductionPlanDetailPage } from "@/components/master-stock/production-plan-detail-page";
 
 export default async function BatchDetailRoute({
   params,
@@ -7,5 +7,5 @@ export default async function BatchDetailRoute({
 }) {
   const { batchId } = await params;
 
-  return <BatchDetailPage batchId={batchId} />;
+  return <ProductionPlanDetailPage planId={batchId} />;
 }

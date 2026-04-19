@@ -183,28 +183,28 @@ export const defaultProducts: Product[] = [
 
 export const defaultBatches: ProductionBatch[] = [
   {
-    id: "batch-1",
-    name: "Indira Ramadan Intake",
+    id: "incoming-1",
+    name: "Indira Ramadan Return",
     status: "draft",
     source: "indira",
-    notes: "Priority Ramadan replenishment",
+    notes: "Craftsman is preparing the first return shipment.",
     createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: defaultLastSyncedAt,
     createdBy: "Production Lead",
     items: [
-      { id: "line-1", productId: "prd-5", plannedQty: 20, receivedQty: 20, checked: false },
-      { id: "line-2", productId: "prd-10", plannedQty: 12, receivedQty: 12, checked: false }
+      { id: "incoming-item-1", productId: "prd-5", quantity: 20 },
+      { id: "incoming-item-2", productId: "prd-10", quantity: 12 },
     ],
     history: [
       {
-        id: "batch-1-history-1",
+        id: "incoming-1-history-1",
         kind: "created",
-        title: "Created batch",
+        title: "Created production batch",
         actor: "Production Lead",
         createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
-        id: "batch-1-history-2",
+        id: "incoming-1-history-2",
         kind: "added",
         title: "Added Eid Mubarak Bracelet | Gold | Ramadhan Edition",
         detail: "+20 pcs • Source: Indira",
@@ -212,7 +212,7 @@ export const defaultBatches: ProductionBatch[] = [
         createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
       },
       {
-        id: "batch-1-history-3",
+        id: "incoming-1-history-3",
         kind: "added",
         title: "Added Noor Iftar Bracelet | Gold | Ramadhan Edition",
         detail: "+12 pcs • Source: Indira",
@@ -222,36 +222,44 @@ export const defaultBatches: ProductionBatch[] = [
     ],
   },
   {
-    id: "batch-2",
-    name: "Mita Valentine Batch",
-    status: "in_progress",
+    id: "incoming-2",
+    name: "Mita Valentine Return",
+    status: "submitted",
     source: "mita",
-    notes: "Valentine backfill",
+    notes: "Submitted by craftsman and waiting for internal verification.",
     createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: defaultLastSyncedAt,
     createdBy: "Production Lead",
+    submittedAt: new Date(now.getTime() - 2.5 * 24 * 60 * 60 * 1000).toISOString(),
     items: [
-      { id: "line-3", productId: "prd-4", plannedQty: 10, receivedQty: 5, checked: true },
-      { id: "line-4", productId: "prd-8", plannedQty: 8, receivedQty: 8, checked: true }
+      { id: "incoming-item-3", productId: "prd-4", quantity: 5 },
+      { id: "incoming-item-4", productId: "prd-8", quantity: 8 },
+      {
+        id: "incoming-item-4-custom",
+        isCustom: true,
+        customName: "Special heart clasp sample",
+        note: "Craftsman packed this separately",
+        quantity: 2,
+      },
     ],
     history: [
       {
-        id: "batch-2-history-1",
+        id: "incoming-2-history-1",
         kind: "created",
-        title: "Created batch",
+        title: "Created production batch",
         actor: "Production Lead",
         createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString(),
       },
       {
-        id: "batch-2-history-2",
+        id: "incoming-2-history-2",
         kind: "added",
         title: "Added BABE Bracelet | Silver | Valentine's Day Edition",
-        detail: "+10 pcs • Source: Mita",
+        detail: "+5 pcs • Source: Mita",
         actor: "Production Lead",
         createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 + 5 * 60 * 1000).toISOString(),
       },
       {
-        id: "batch-2-history-3",
+        id: "incoming-2-history-3",
         kind: "added",
         title: "Added Laylat al-Qadr Bracelet | Gold | Ramadhan Edition",
         detail: "+8 pcs • Source: Mita",
@@ -259,17 +267,87 @@ export const defaultBatches: ProductionBatch[] = [
         createdAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000 + 8 * 60 * 1000).toISOString(),
       },
       {
-        id: "batch-2-history-4",
-        kind: "edited",
-        title: "Edited quantity for BABE Bracelet | Silver | Valentine's Day Edition",
-        detail: "10 → 5 pcs",
+        id: "incoming-2-history-4",
+        kind: "completed",
+        title: "Submitted production batch",
+        detail: "Ready for internal verification",
         actor: "Production Lead",
         createdAt: new Date(now.getTime() - 2.5 * 24 * 60 * 60 * 1000).toISOString(),
+      },
+    ],
+  },
+  {
+    id: "incoming-3",
+    name: "Warehouse Mixed Return",
+    status: "receiving",
+    source: "warehouse",
+    notes: "Internal team is checking a mixed craftsman return with custom lines.",
+    createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: defaultLastSyncedAt,
+    createdBy: "Admin",
+    submittedAt: new Date(now.getTime() - 22 * 60 * 60 * 1000).toISOString(),
+    receivingAt: new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(),
+    items: [
+      { id: "incoming-item-5", productId: "prd-1", quantity: 9, checked: true },
+      {
+        id: "incoming-item-6",
+        isCustom: true,
+        customName: "Repair sample bracelet",
+        note: "No SKU on the pouch",
+        quantity: 3,
+        checked: false,
+      },
+    ],
+    history: [
+      {
+        id: "incoming-3-history-1",
+        kind: "created",
+        title: "Created production batch",
+        actor: "Admin",
+        createdAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "incoming-3-history-2",
+        kind: "added",
+        title: "Added 4EVER Bracelet | Gold | Valentine's Day Edition",
+        detail: "+9 pcs • Source: Warehouse",
+        actor: "Admin",
+        createdAt: new Date(now.getTime() - 23.5 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "incoming-3-history-3",
+        kind: "added",
+        title: "Added Repair sample bracelet",
+        detail: "+3 pcs • Source: Warehouse",
+        actor: "Admin",
+        createdAt: new Date(now.getTime() - 23 * 60 * 60 * 1000).toISOString(),
+      },
+      {
+        id: "incoming-3-history-4",
+        kind: "completed",
+        title: "Started receiving production batch",
+        detail: "Checklist verification started",
+        actor: "Admin",
+        createdAt: new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(),
       },
     ],
   }
 ];
 
-export const defaultProductionPlans: ProductionPlan[] = [];
+export const defaultProductionPlans: ProductionPlan[] = [
+  {
+    id: "dispatch-1",
+    name: "Indira Dispatch Week 3",
+    source: "indira",
+    notes: "Outgoing bracelet bundle for craftsman handoff.",
+    items: [
+      { productId: "prd-1", plannedQty: 18, quantity: 18 },
+      { productId: "prd-3", plannedQty: 10, quantity: 10 },
+    ],
+    createdAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000).toISOString(),
+    status: "draft",
+    history: [],
+  },
+];
 
 export const defaultMovements: StockMovement[] = [];

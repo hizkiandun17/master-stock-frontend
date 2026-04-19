@@ -1,5 +1,5 @@
-import { CreateBatchPage } from "@/components/master-stock/create-batch-page";
+import { redirect } from "next/navigation";
 
 export default function CreateBatchRoute() {
-  return <CreateBatchPage />;
+  redirect("/master-stock/batches");
 }

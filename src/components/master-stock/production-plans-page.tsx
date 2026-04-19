@@ -20,7 +20,7 @@ function getStatusClassName(status: "draft" | "completed") {
 
 export function ProductionPlansPage() {
   const router = useRouter();
-  const { productionPlans, deleteProductionPlan } = useMasterStock();
+  const { productionPlans, deleteProductionPlan, currentUserRole } = useMasterStock();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [planToDelete, setPlanToDelete] = useState<string | null>(null);
 
@@ -42,31 +42,40 @@ export function ProductionPlansPage() {
   }
 
   return (
-    <MasterStockShell currentPath="plans">
+    <MasterStockShell currentPath="dispatch">
+      {currentUserRole === "production" ? (
+        <section className="space-y-4">
+          <Card className="border-white/10">
+            <CardContent className="px-5 py-12">
+              <h1 className="text-xl font-semibold text-foreground">Batches are internal-only</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Craftsman users work in Production Batch. Dispatch stays with the internal team only.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
       <section className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              Production Plans
-            </h1>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Dispatch</h1>
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-              Plan incoming stock without affecting real inventory.
+              What production sends out, with owner visibility and export-ready outgoing records.
             </p>
           </div>
 
           <Button onClick={() => setIsCreateOpen(true)} className="min-h-12 w-full sm:w-auto">
             <FilePlus2 className="mr-2 h-4 w-4" />
-            Create New Plan
+            Create Dispatch
           </Button>
         </div>
 
         {sortedPlans.length === 0 ? (
           <Card className="border-white/10">
             <CardContent className="px-5 py-12 text-center">
-              <h2 className="text-lg font-semibold text-foreground">No production plans yet</h2>
+              <h2 className="text-lg font-semibold text-foreground">No dispatch records yet</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create a plan to organize incoming stock from Indira or Mita without touching
-                real inventory.
+                Create a dispatch record to prepare what production is sending out next.
               </p>
             </CardContent>
           </Card>
@@ -80,14 +89,14 @@ export function ProductionPlansPage() {
               return (
                 <div
                   key={plan.id}
-                  onClick={() => router.push(`/master-stock/plans/${plan.id}`)}
+                  onClick={() => router.push(`/master-stock/batches/${plan.id}`)}
                   className="group rounded-[20px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      router.push(`/master-stock/plans/${plan.id}`);
+                      router.push(`/master-stock/batches/${plan.id}`);
                     }
                   }}
                 >
@@ -138,11 +147,12 @@ export function ProductionPlansPage() {
           </div>
         )}
       </section>
+      )}
 
       <CreateProductionPlanDialog
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
-        onCreated={(planId) => router.push(`/master-stock/plans/${planId}`)}
+        onCreated={(planId) => router.push(`/master-stock/batches/${planId}`)}
       />
 
       <Dialog
@@ -152,8 +162,8 @@ export function ProductionPlansPage() {
             setPlanToDelete(null);
           }
         }}
-        title="Delete plan?"
-        description="This will permanently remove the selected production plan."
+        title="Delete dispatch?"
+        description="This will permanently remove the selected dispatch record."
         className="border-white/10 bg-[#09090b] md:max-w-md"
         headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
         bodyClassName="hidden"
@@ -171,7 +181,7 @@ export function ProductionPlansPage() {
               onClick={confirmDelete}
               className="min-h-11 w-full sm:w-auto"
             >
-              Delete Plan
+              Delete Dispatch
             </Button>
           </div>
         }

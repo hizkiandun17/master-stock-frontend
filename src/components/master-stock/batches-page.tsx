@@ -14,7 +14,7 @@ import type { ProductionBatch } from "@/lib/types";
 import { cn, formatDate, titleCase } from "@/lib/utils";
 
 function getBatchName(batch: ProductionBatch) {
-  return batch.name?.trim() || `${titleCase(batch.source || "")} Batch`;
+  return batch.name?.trim() || `${titleCase(batch.source || "")} Production Batch`;
 }
 
 function getStatusClassName(status: ProductionBatch["status"]) {
@@ -22,7 +22,11 @@ function getStatusClassName(status: ProductionBatch["status"]) {
     return "bg-white text-black";
   }
 
-  if (status === "in_progress") {
+  if (status === "receiving") {
+    return "border border-success/30 text-success";
+  }
+
+  if (status === "submitted") {
     return "border border-warning/30 text-warning";
   }
 
@@ -31,7 +35,7 @@ function getStatusClassName(status: ProductionBatch["status"]) {
 
 export function BatchesPage() {
   const router = useRouter();
-  const { batches, deleteBatch } = useMasterStock();
+  const { batches, deleteIncoming, currentUserRole } = useMasterStock();
   const [batchToDelete, setBatchToDelete] = useState<string | null>(null);
 
   const sortedBatches = useMemo(
@@ -47,36 +51,49 @@ export function BatchesPage() {
 
   function confirmDelete() {
     if (!batchToDelete) return;
-    deleteBatch(batchToDelete);
+    deleteIncoming(batchToDelete);
     setBatchToDelete(null);
   }
 
   return (
-    <MasterStockShell currentPath="batches">
+    <MasterStockShell currentPath="production-batch">
+      {currentUserRole === "production" ? (
+        <section className="space-y-4">
+          <Card className="border-white/10">
+            <CardContent className="px-5 py-12">
+              <h1 className="text-xl font-semibold text-foreground">Production Batch is internal-only</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Craftsman reports are already saved in the system. Internal users receive, verify,
+                and complete them here.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      ) : (
       <section className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Batches</h1>
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Production Batch</h1>
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-              Track incoming stock from production.
+              Craftsman submissions already saved in the system, ready for internal receiving and stock updates.
             </p>
           </div>
 
           <Button
-            onClick={() => router.push("/master-stock/batches/new")}
+            onClick={() => router.push("/master-stock/incoming/new")}
             className="min-h-12 w-full sm:w-auto"
           >
             <FilePlus2 className="mr-2 h-4 w-4" />
-            Create Batch
+            Create Production Batch
           </Button>
         </div>
 
         {sortedBatches.length === 0 ? (
-          <Card className="border-white/10">
-            <CardContent className="px-5 py-12 text-center">
-              <h2 className="text-lg font-semibold text-foreground">No batches yet</h2>
+            <Card className="border-white/10">
+              <CardContent className="px-5 py-12 text-center">
+              <h2 className="text-lg font-semibold text-foreground">No production batches yet</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create a batch to track what production planned and what actually arrived.
+                Create a production batch to capture what the craftsman is sending back.
               </p>
             </CardContent>
           </Card>
@@ -93,14 +110,14 @@ export function BatchesPage() {
               return (
                 <div
                   key={batch.id}
-                  onClick={() => router.push(`/master-stock/batches/${batch.id}`)}
+                  onClick={() => router.push(`/master-stock/incoming/${batch.id}`)}
                   className="group rounded-[20px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {
                       event.preventDefault();
-                      router.push(`/master-stock/batches/${batch.id}`);
+                      router.push(`/master-stock/incoming/${batch.id}`);
                     }
                   }}
                 >
@@ -143,7 +160,7 @@ export function BatchesPage() {
 
                       <div className="space-y-2 text-sm text-muted-foreground">
                         <p>
-                          {totals.planned} pcs • {itemCount} item
+                          {totals.total} pcs • {itemCount} item
                           {itemCount === 1 ? "" : "s"}
                         </p>
                         <p>{createdLabel}</p>
@@ -156,6 +173,7 @@ export function BatchesPage() {
           </div>
         )}
       </section>
+      )}
 
       <Dialog
         open={batchToDelete !== null}
@@ -165,7 +183,7 @@ export function BatchesPage() {
           }
         }}
         title="Delete batch?"
-        description="This will permanently remove the selected draft batch."
+        description="This will permanently remove the selected draft production batch."
         className="border-white/10 bg-[#09090b] md:max-w-md"
         headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
         bodyClassName="hidden"
@@ -183,7 +201,7 @@ export function BatchesPage() {
               onClick={confirmDelete}
               className="min-h-11 w-full sm:w-auto"
             >
-              Delete Batch
+              Delete Production Batch
             </Button>
           </div>
         }

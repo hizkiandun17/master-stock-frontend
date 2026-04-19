@@ -1,4 +1,4 @@
-import { ProductionPlanDetailPage } from "@/components/master-stock/production-plan-detail-page";
+import { redirect } from "next/navigation";
 
 export default async function MasterStockPlanDetailRoute({
   params,
@@ -6,6 +6,5 @@ export default async function MasterStockPlanDetailRoute({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
-  return <ProductionPlanDetailPage planId={id} />;
+  redirect(`/master-stock/incoming/${id}`);
 }

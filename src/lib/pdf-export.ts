@@ -35,7 +35,7 @@ export interface MasterStockPdfModel {
   generatedOn: string;
   totalSkus: number;
   totalStock: number;
-  mode: "actual" | "production-plan";
+  mode: "actual" | "production-plan" | "dispatch-batch";
   source?: ProductionPlanSource;
   sections: PdfSection[];
 }
@@ -43,7 +43,7 @@ export interface MasterStockPdfModel {
 interface BuildMasterStockPdfModelOptions {
   products: Product[];
   categories: Category[];
-  mode?: "actual" | "production-plan";
+  mode?: "actual" | "production-plan" | "dispatch-batch";
   source?: ProductionPlanSource;
   productionPlans?: ProductionPlan[];
 }
@@ -84,13 +84,13 @@ function getPlanQuantitiesBySource(
 
 function getDisplayStocks(
   product: Product,
-  mode: "actual" | "production-plan",
+  mode: "actual" | "production-plan" | "dispatch-batch",
   source: ProductionPlanSource | undefined,
   planQuantities: Record<string, number>,
 ) {
   const actual = product.currentStock;
   const updatedValue =
-    mode === "production-plan" && source ? planQuantities[product.id] : undefined;
+    mode !== "actual" && source ? planQuantities[product.id] : undefined;
   const sourceKey = source as StockLocationKey | undefined;
   const sourceWasUpdated = typeof updatedValue === "number" && sourceKey !== undefined;
 
@@ -118,7 +118,7 @@ export function buildMasterStockPdfModel({
 }: BuildMasterStockPdfModelOptions): MasterStockPdfModel {
   const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
   const sourcePlanQuantities =
-    mode === "production-plan" && source
+    mode !== "actual" && source
       ? getPlanQuantitiesBySource(productionPlans, source)
       : {};
 
@@ -205,8 +205,8 @@ export async function exportMasterStockPdf(options: ExportMasterStockPdfOptions)
     `Total Stock: ${formatNumber(model.totalStock)} pcs`,
   ];
 
-  if (model.mode === "production-plan" && model.source) {
-    headerLines.push("Mode: Production Plan");
+  if (model.mode !== "actual" && model.source) {
+    headerLines.push(model.mode === "dispatch-batch" ? "Mode: Dispatch Batch" : "Mode: Production Plan");
     headerLines.push(`Source: ${titleCase(model.source)}`);
   }
 
@@ -214,7 +214,7 @@ export async function exportMasterStockPdf(options: ExportMasterStockPdfOptions)
     doc.text(line, pageWidth - marginX, cursorY + index * 16, { align: "right" });
   });
 
-  cursorY += model.mode === "production-plan" ? 92 : 76;
+  cursorY += model.mode !== "actual" ? 92 : 76;
 
   const sourceColumn = model.source as PdfColumnKey | undefined;
 
@@ -305,6 +305,8 @@ export async function exportMasterStockPdf(options: ExportMasterStockPdfOptions)
   const defaultFileName =
     model.mode === "production-plan"
       ? `OSHE_Samapura-Production-Stock_${model.generatedOn}.pdf`
+      : model.mode === "dispatch-batch"
+        ? `OSHE_Samapura-Dispatch-Batch_${model.generatedOn}.pdf`
       : `OSHE_Samapura-Stock-Master_${model.generatedOn}.pdf`;
 
   doc.save(options.fileName ?? defaultFileName);
@@ -326,12 +328,12 @@ export async function exportSingleProductionPlanPdf({
   return exportMasterStockPdf({
     products: planProducts,
     categories,
-    mode: "production-plan",
+    mode: "dispatch-batch",
     source: plan.source,
     productionPlans: [plan],
     fileName:
       fileName ??
-      `OSHE_Samapura-Production-Plan-${plan.source}-${new Date(plan.createdAt)
+      `OSHE_Samapura-Dispatch-Batch-${plan.source}-${new Date(plan.createdAt)
         .toISOString()
         .slice(0, 10)}.pdf`,
   });

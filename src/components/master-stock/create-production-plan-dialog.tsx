@@ -52,8 +52,8 @@ export function CreateProductionPlanDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Create New Plan"
-      description="Plan incoming stock without affecting real inventory."
+      title="Create Dispatch"
+      description="Prepare an outgoing dispatch list for production."
       className="border-white/10 bg-[#09090b] md:max-w-xl"
       headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
       bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
@@ -73,18 +73,18 @@ export function CreateProductionPlanDialog({
             disabled={!name.trim() || !source}
             className="min-h-11 w-full sm:w-auto"
           >
-            Create Plan
+            Create Dispatch
           </Button>
         </div>
       }
     >
       <div className="space-y-6">
         <label className="space-y-2 text-sm">
-          <span className="text-foreground">Plan Name</span>
+          <span className="text-foreground">Dispatch Name</span>
           <Input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="e.g. Indira Restock Week 3"
+            placeholder="e.g. Indira Dispatch Week 3"
             className="h-11"
           />
         </label>
@@ -107,7 +107,7 @@ export function CreateProductionPlanDialog({
           <Textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="Optional notes for the production team"
+            placeholder="Optional notes for the dispatch team"
             className="min-h-[120px]"
           />
         </label>

@@ -21,6 +21,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     productionPlans,
     products,
     categories,
+    currentUserRole,
     updateProductionPlan,
     completeProductionPlan,
   } = useMasterStock();
@@ -78,10 +79,10 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
 
   if (!plan) {
     return (
-      <MasterStockShell currentPath="plans">
+      <MasterStockShell currentPath="dispatch">
         <section className="space-y-4">
           <Link
-            href="/master-stock/plans"
+            href="/master-stock/batches"
             className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -89,9 +90,33 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
           </Link>
           <Card className="border-white/10">
             <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Plan not found</h1>
+              <h1 className="text-xl font-semibold text-foreground">Dispatch not found</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                This production plan no longer exists or has not been created yet.
+                This batch no longer exists or has not been created yet.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      </MasterStockShell>
+    );
+  }
+
+  if (currentUserRole === "production") {
+    return (
+      <MasterStockShell currentPath="dispatch">
+        <section className="space-y-4">
+          <Link
+            href="/master-stock/incoming"
+            className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Link>
+          <Card className="border-white/10">
+            <CardContent className="px-5 py-12">
+              <h1 className="text-xl font-semibold text-foreground">Dispatch is internal-only</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Craftsman users only have access to Production Batch records. Dispatch stays with the internal team.
               </p>
             </CardContent>
           </Card>
@@ -181,12 +206,12 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
   }
 
   return (
-    <MasterStockShell currentPath="plans">
+    <MasterStockShell currentPath="dispatch">
       <section className="space-y-8 pb-24 md:pb-0">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-3">
             <Link
-              href="/master-stock/plans"
+              href="/master-stock/batches"
               className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -224,7 +249,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                 className="min-h-11 w-full sm:w-auto"
               >
                 <Check className="mr-2 h-4 w-4" />
-                Complete Plan
+                Complete Batch
               </Button>
             ) : (
               <Button onClick={handleExport} className="min-h-11 w-full sm:w-auto">
@@ -256,7 +281,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
                   categories={safeCategories}
                   selectedProductIds={selectedProductIds}
                   onAdd={addProduct}
-                  title="Add items to this plan"
+                  title="Add items to this batch"
                   triggerRef={addItemButtonRef}
                 />
               </div>
@@ -265,8 +290,8 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
             {planItems.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
                 {isDraft
-                  ? "Add products to start building this plan."
-                  : "No products were added to this plan."}
+                  ? "Add products to start building this batch."
+                  : "No products were added to this batch."}
               </div>
             ) : (
               <div className="space-y-2">
@@ -327,15 +352,15 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
 
         <ActivityHistory
           entries={planHistory}
-          description="Traceable audit trail for this production plan."
+          description="Traceable audit trail for this batch."
         />
       </section>
 
       <Dialog
         open={isCompleteDialogOpen}
         onOpenChange={setIsCompleteDialogOpen}
-        title="Mark this plan as complete?"
-        description="Once completed, this plan becomes read-only and is ready for PDF export."
+        title="Mark this batch as complete?"
+        description="Once completed, this dispatch batch becomes read-only and is ready for PDF export."
         className="border-white/10 bg-[#09090b] md:max-w-md"
         headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
         bodyClassName="hidden"
@@ -352,7 +377,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
               onClick={handleCompletePlan}
               className="min-h-11 w-full sm:w-auto"
             >
-              Complete Plan
+              Complete Batch
             </Button>
           </div>
         }
@@ -367,7 +392,7 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
             className="min-h-12 w-full"
           >
             <Check className="mr-2 h-4 w-4" />
-            Complete Plan
+            Complete Batch
           </Button>
         ) : (
           <Button onClick={handleExport} className="min-h-12 w-full">

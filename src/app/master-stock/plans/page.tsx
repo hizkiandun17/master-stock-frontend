@@ -1,5 +1,5 @@
-import { ProductionPlansPage } from "@/components/master-stock/production-plans-page";
+import { redirect } from "next/navigation";
 
 export default function MasterStockPlansRoute() {
-  return <ProductionPlansPage />;
+  redirect("/master-stock/incoming");
 }

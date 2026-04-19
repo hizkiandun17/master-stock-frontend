@@ -25,7 +25,7 @@ import type {
   AddProductInput,
   AdjustmentLog,
   ActivityEntry,
-  BatchLine,
+  BatchPlannedItem,
   Category,
   CreateProductionPlanInput,
   CreateBatchInput,
@@ -41,6 +41,7 @@ import type {
   UpdateProductPricingInput,
   UserRole,
 } from "@/lib/types";
+import { getBatchReceivedByProduct } from "@/lib/stock-helpers";
 import { titleCase } from "@/lib/utils";
 
 type AdjustmentMode = "set" | "delta";
@@ -82,19 +83,22 @@ interface MasterStockContextValue {
     value: number;
     reason: string;
   }) => void;
-  createBatch: (input: CreateBatchInput) => ProductionBatch;
-  updateBatch: (
-    batchId: string,
-    patch: Partial<Pick<ProductionBatch, "name" | "source" | "notes">> & {
-      items?: BatchLine[];
-    },
-  ) => void;
-  completeBatch: (batchId: string) => void;
-  deleteBatch: (batchId: string) => void;
+  createIncoming: (input: CreateBatchInput) => ProductionBatch;
+  updateIncoming: (input: {
+    incomingId: string;
+    name?: string;
+    source?: StockLocationKey;
+    notes?: string;
+    items?: BatchPlannedItem[];
+  }) => void;
+  submitIncoming: (incomingId: string) => void;
+  startReceivingIncoming: (incomingId: string) => void;
+  completeIncoming: (incomingId: string) => void;
+  deleteIncoming: (incomingId: string) => void;
   dismissToast: (id: string) => void;
 }
 
-const STORAGE_KEY = "master-stock-state-v1";
+const STORAGE_KEY = "master-stock-state-v2";
 
 const MasterStockContext = createContext<MasterStockContextValue | null>(null);
 
@@ -104,6 +108,21 @@ function makeId(prefix: string) {
 
 function getSourceLabel(source?: string) {
   return titleCase(source || "") || "-";
+}
+
+function getIncomingItemLabel(
+  item: Pick<BatchPlannedItem, "productId" | "customName" | "isCustom">,
+  products: Product[],
+) {
+  if (item.isCustom) {
+    return item.customName?.trim() || "Custom item";
+  }
+
+  if (!item.productId) {
+    return "Unnamed item";
+  }
+
+  return products.find((product) => product.id === item.productId)?.name ?? item.productId;
 }
 
 function createActivityEntry(
@@ -258,7 +277,7 @@ function normalizeProductionPlans(input: ProductionPlan[]): ProductionPlan[] {
     name:
       typeof plan.name === "string" && plan.name.trim()
         ? plan.name.trim()
-        : `Production Plan ${index + 1}`,
+        : `Batch ${index + 1}`,
     source: plan.source,
     notes:
       typeof plan.notes === "string" && plan.notes.trim() ? plan.notes.trim() : undefined,
@@ -301,33 +320,62 @@ function normalizeBatches(input: ProductionBatch[]): ProductionBatch[] {
     name:
       typeof batch.name === "string" && batch.name.trim()
         ? batch.name.trim()
-        : `Batch ${index + 1}`,
+        : `Production Batch ${index + 1}`,
     source: batch.source,
-    status: batch.status === "completed" ? "completed" : batch.status === "in_progress" ? "in_progress" : "draft",
+    status:
+      batch.status === "completed"
+        ? "completed"
+        : batch.status === "receiving"
+          ? "receiving"
+          : batch.status === "submitted"
+            ? "submitted"
+            : "draft",
     notes:
       typeof batch.notes === "string" && batch.notes.trim() ? batch.notes.trim() : undefined,
     createdAt: typeof batch.createdAt === "string" ? batch.createdAt : defaultLastSyncedAt,
     updatedAt: typeof batch.updatedAt === "string" ? batch.updatedAt : defaultLastSyncedAt,
     createdBy: batch.createdBy,
+    submittedAt:
+      typeof batch.submittedAt === "string" ? batch.submittedAt : undefined,
+    receivingAt:
+      typeof (batch as ProductionBatch & { receivingAt?: string }).receivingAt === "string"
+        ? (batch as ProductionBatch & { receivingAt?: string }).receivingAt
+        : typeof (batch as ProductionBatch & { verifiedAt?: string }).verifiedAt === "string"
+          ? (batch as ProductionBatch & { verifiedAt?: string }).verifiedAt
+          : undefined,
     completedAt:
       batch.status === "completed" && typeof batch.completedAt === "string"
         ? batch.completedAt
         : undefined,
     items: Array.isArray(batch.items)
       ? batch.items.map((item) => ({
-          id: item.id,
+          id: item.id ?? makeId("incoming-item"),
           productId: item.productId,
-          plannedQty: Math.max(0, item.plannedQty),
-          receivedQty: Math.max(0, item.receivedQty),
-          checked:
-            typeof item.checked === "boolean"
-              ? item.checked
-              : batch.status === "completed"
-                ? Math.max(0, item.receivedQty) > 0
-                : false,
-          note: item.note,
+          isCustom: Boolean(item.isCustom || (!item.productId && item.customName)),
+          customName:
+            typeof item.customName === "string" && item.customName.trim()
+              ? item.customName.trim()
+              : undefined,
+          note:
+            typeof item.note === "string" && item.note.trim() ? item.note.trim() : undefined,
+          mappedProductId:
+            typeof item.mappedProductId === "string" && item.mappedProductId.trim()
+              ? item.mappedProductId
+              : undefined,
+          checked: batch.status === "completed" ? true : Boolean(item.checked),
+          quantity: Math.max(0, item.quantity),
         }))
-      : [],
+      : Array.isArray((batch as ProductionBatch & {
+            plannedItems?: Array<{ id?: string; productId: string; plannedQty?: number }>;
+          }).plannedItems)
+        ? (((batch as ProductionBatch & {
+              plannedItems?: Array<{ id?: string; productId: string; plannedQty?: number }>;
+            }).plannedItems ?? [])).map((item) => ({
+              id: item.id ?? makeId("incoming-item"),
+              productId: item.productId,
+              quantity: Math.max(0, item.plannedQty ?? 0),
+            }))
+        : [],
     history: Array.isArray(batch.history)
       ? batch.history.map((entry) =>
           normalizeHistoryEntry(
@@ -639,7 +687,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
           createActivityEntry({
             id: makeId("plan-history"),
             kind: "created",
-            title: "Created plan",
+            title: "Created batch",
             actor: actorLabel,
             createdAt,
           }),
@@ -660,8 +708,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
       setProductionPlans((current) => [nextPlan, ...current]);
       pushToast({
-        title: "Production plan created successfully",
-        description: "Incoming stock planning was saved separately from real inventory.",
+        title: "Batch created successfully",
+        description: "The outgoing dispatch batch was saved and is ready for item prep.",
         variant: "success",
       });
 
@@ -781,7 +829,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
                   createActivityEntry({
                     id: makeId("plan-history"),
                     kind: "completed",
-                    title: "Completed plan",
+                    title: "Completed batch",
                     detail: "Ready for export",
                     actor: titleCase(currentUserRole),
                     createdAt: completedAt,
@@ -793,8 +841,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       );
 
       pushToast({
-        title: "Production plan completed",
-        description: "This plan is now locked and ready for PDF export.",
+        title: "Batch completed",
+        description: "This dispatch batch is now locked and ready for PDF export.",
         variant: "success",
       });
     },
@@ -805,8 +853,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     (planId: string) => {
       setProductionPlans((current) => current.filter((plan) => plan.id !== planId));
       pushToast({
-        title: "Production plan deleted",
-        description: "The plan was removed from the planning workspace.",
+        title: "Batch deleted",
+        description: "The outgoing dispatch batch was removed.",
       });
     },
     [pushToast],
@@ -961,43 +1009,45 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     [currentUserRole, pushToast, syncTimestamp],
   );
 
-  const createBatch = useCallback(
+  const createIncoming = useCallback(
     (input: CreateBatchInput) => {
       const createdAt = new Date().toISOString();
       const actorLabel = titleCase(currentUserRole);
-      const initialItems = (input.items ?? []).map((item) => ({
-        id: makeId("line"),
+      const items: BatchPlannedItem[] = (input.items ?? []).map((item) => ({
+        id: makeId("incoming-item"),
         productId: item.productId,
-        plannedQty: Math.max(0, item.plannedQty),
-        receivedQty: Math.max(0, item.receivedQty ?? item.plannedQty),
-        checked: false,
+        isCustom: Boolean(item.isCustom || (!item.productId && item.customName)),
+        customName: item.customName?.trim() || undefined,
+        note: item.note?.trim() || undefined,
+        mappedProductId: item.mappedProductId,
+        checked: Boolean(item.checked),
+        quantity: Math.max(0, item.quantity),
       }));
-      const batch: ProductionBatch = {
-        id: makeId("batch"),
-        name: input.name?.trim() || `Batch ${batches.length + 1}`,
+      const incoming: ProductionBatch = {
+        id: makeId("incoming"),
+        name: input.name?.trim() || `Production Batch ${batches.length + 1}`,
         source: input.source,
         status: "draft",
         notes: input.notes?.trim() || undefined,
         createdAt,
         updatedAt: createdAt,
         createdBy: actorLabel,
-        items: initialItems,
+        items,
         history: [
           createActivityEntry({
-            id: makeId("batch-history"),
+            id: makeId("incoming-history"),
             kind: "created",
-            title: "Created batch",
+            title: "Created production batch",
             actor: actorLabel,
             createdAt,
           }),
-          ...initialItems.map((item) => {
-            const productName =
-              products.find((product) => product.id === item.productId)?.name ?? item.productId;
+          ...items.map((item) => {
+            const productName = getIncomingItemLabel(item, products);
             return createActivityEntry({
-              id: makeId("batch-history"),
+              id: makeId("incoming-history"),
               kind: "added",
               title: `Added ${productName}`,
-              detail: `+${item.receivedQty} pcs • Source: ${getSourceLabel(input.source)}`,
+              detail: `+${item.quantity} pcs • Source: ${getSourceLabel(input.source)}`,
               actor: actorLabel,
               createdAt,
             });
@@ -1005,112 +1055,132 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
         ],
       };
 
-      setBatches((current) => [batch, ...current]);
+      setBatches((current) => [incoming, ...current]);
       pushToast({
-        title: "Batch created",
-        description: `${batch.name} is ready for receiving updates.`,
+        title: "Production batch created",
+        description: `${incoming.name} is ready for craftsman input.`,
         variant: "success",
       });
 
-      return batch;
+      return incoming;
     },
     [batches.length, currentUserRole, products, pushToast],
   );
 
-  const updateBatch = useCallback(
-    (
-      batchId: string,
-      patch: Partial<Pick<ProductionBatch, "name" | "source" | "notes">> & {
-        items?: BatchLine[];
-      },
-    ) => {
+  const updateIncoming = useCallback(
+    ({
+      incomingId,
+      name,
+      source,
+      notes,
+      items,
+    }: {
+      incomingId: string;
+      name?: string;
+      source?: StockLocationKey;
+      notes?: string;
+      items?: BatchPlannedItem[];
+    }) => {
       setBatches((current) =>
-        current.map((batch) => {
-          if (batch.id !== batchId || batch.status === "completed") {
-            return batch;
+        current.map((incoming) => {
+          if (incoming.id !== incomingId || incoming.status === "completed") {
+            return incoming;
           }
 
-          const nextItems = (patch.items ?? batch.items).map((item) => ({
-            ...item,
-            plannedQty: Math.max(0, item.plannedQty),
-            receivedQty: Math.max(0, item.receivedQty),
-            checked: Boolean(item.checked),
-          }));
-          const historyEntries = [...batch.history];
+          const normalizedItems =
+            items?.map((item) => ({
+              id: item.id ?? makeId("incoming-item"),
+              productId: item.productId,
+              isCustom: Boolean(item.isCustom || (!item.productId && item.customName)),
+              customName: item.customName?.trim() || undefined,
+              note: item.note?.trim() || undefined,
+              mappedProductId: item.mappedProductId,
+              checked: Boolean(item.checked),
+              quantity: Math.max(0, item.quantity),
+            })) ?? incoming.items;
+
+          const historyEntries = [...incoming.history];
           const entryCreatedAt = new Date().toISOString();
           const actorLabel = titleCase(currentUserRole);
-          const previousItemsByProductId = new Map(
-            batch.items.map((item) => [item.productId, item]),
-          );
-          const addedItems = nextItems.filter((item) => !previousItemsByProductId.has(item.productId));
-          const removedItems = batch.items.filter(
-            (item) => !nextItems.some((nextItem) => nextItem.productId === item.productId),
+          const previousItemsById = new Map(incoming.items.map((item) => [item.id, item]));
+          const addedItems = normalizedItems.filter((item) => !previousItemsById.has(item.id));
+          const removedItems = incoming.items.filter(
+            (item) => !normalizedItems.some((nextItem) => nextItem.id === item.id),
           );
 
           addedItems.forEach((item) => {
-            const productName =
-              products.find((product) => product.id === item.productId)?.name ?? item.productId;
-            historyEntries.push(createActivityEntry({
-              id: makeId("batch-history"),
-              kind: "added",
-              title: `Added ${productName}`,
-              detail: `+${item.receivedQty} pcs • Source: ${getSourceLabel(patch.source ?? batch.source)}`,
-              actor: actorLabel,
-              createdAt: entryCreatedAt,
-            }));
+            const productName = getIncomingItemLabel(item, products);
+            historyEntries.push(
+              createActivityEntry({
+                id: makeId("incoming-history"),
+                kind: "added",
+                title: `Added ${productName}`,
+                detail: `+${item.quantity} pcs • Source: ${getSourceLabel(source ?? incoming.source)}`,
+                actor: actorLabel,
+                createdAt: entryCreatedAt,
+              }),
+            );
           });
 
           removedItems.forEach((item) => {
-            const productName =
-              products.find((product) => product.id === item.productId)?.name ?? item.productId;
-            historyEntries.push(createActivityEntry({
-              id: makeId("batch-history"),
-              kind: "removed",
-              title: `Removed ${productName}`,
-              detail: `-${item.receivedQty} pcs • Source: ${getSourceLabel(patch.source ?? batch.source)}`,
-              actor: actorLabel,
-              createdAt: entryCreatedAt,
-            }));
+            const productName = getIncomingItemLabel(item, products);
+            historyEntries.push(
+              createActivityEntry({
+                id: makeId("incoming-history"),
+                kind: "removed",
+                title: `Removed ${productName}`,
+                detail: `-${item.quantity} pcs • Source: ${getSourceLabel(source ?? incoming.source)}`,
+                actor: actorLabel,
+                createdAt: entryCreatedAt,
+              }),
+            );
           });
 
-          nextItems.forEach((item) => {
-            const previousItem = previousItemsByProductId.get(item.productId);
-            if (!previousItem || previousItem.receivedQty === item.receivedQty) {
+          normalizedItems.forEach((item) => {
+            const previousItem = previousItemsById.get(item.id);
+            if (!previousItem || previousItem.quantity === item.quantity) {
+              if (previousItem?.checked !== item.checked) {
+                const productName = getIncomingItemLabel(item, products);
+                historyEntries.push(
+                  createActivityEntry({
+                    id: makeId("incoming-history"),
+                    kind: "edited",
+                    title: `Updated checklist for ${productName}`,
+                    detail: item.checked ? "Checked for receiving" : "Unchecked for receiving",
+                    actor: actorLabel,
+                    createdAt: entryCreatedAt,
+                  }),
+                );
+              }
               return;
             }
 
-            const productName =
-              products.find((product) => product.id === item.productId)?.name ?? item.productId;
-            historyEntries.push(createActivityEntry({
-              id: makeId("batch-history"),
-              kind: "edited",
-              title: `Edited quantity for ${productName}`,
-              detail: `${previousItem.receivedQty} → ${item.receivedQty} pcs`,
-              actor: actorLabel,
-              createdAt: entryCreatedAt,
-            }));
+            const productName = getIncomingItemLabel(item, products);
+            historyEntries.push(
+              createActivityEntry({
+                id: makeId("incoming-history"),
+                kind: "edited",
+                title: `Edited quantity for ${productName}`,
+                detail: `${previousItem.quantity} → ${item.quantity} pcs`,
+                actor: actorLabel,
+                createdAt: entryCreatedAt,
+              }),
+            );
           });
-          const hasChecklistProgress =
-            nextItems.some((item) => item.checked || item.receivedQty !== item.plannedQty) ||
-            (patch.items !== undefined && patch.items.length !== batch.items.length);
 
           return {
-            ...batch,
-            name:
-              typeof patch.name === "string"
-                ? patch.name.trim() || batch.name
-                : batch.name,
-            source: patch.source ?? batch.source,
+            ...incoming,
+            name: typeof name === "string" ? name.trim() || incoming.name : incoming.name,
+            source: source ?? incoming.source,
             notes:
-              typeof patch.notes === "string"
-                ? patch.notes.trim() || undefined
-                : patch.notes === undefined
-                  ? batch.notes
+              typeof notes === "string"
+                ? notes.trim() || undefined
+                : notes === undefined
+                  ? incoming.notes
                   : undefined,
-            items: nextItems,
+            items: normalizedItems,
+            updatedAt: entryCreatedAt,
             history: historyEntries,
-            status: hasChecklistProgress ? "in_progress" : "draft",
-            updatedAt: new Date().toISOString(),
           };
         }),
       );
@@ -1118,24 +1188,87 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     [currentUserRole, products],
   );
 
-  const completeBatch = useCallback(
-    (batchId: string) => {
-      const batch = batches.find((entry) => entry.id === batchId);
-      if (!batch || batch.status === "completed") return;
+  const submitIncoming = useCallback(
+    (incomingId: string) => {
+      const submittedAt = new Date().toISOString();
+
+      setBatches((current) =>
+        current.map((incoming) =>
+          incoming.id === incomingId && incoming.status === "draft"
+            ? {
+                ...incoming,
+                status: "submitted",
+                submittedAt,
+                updatedAt: submittedAt,
+                history: [
+                  ...incoming.history,
+                  createActivityEntry({
+                    id: makeId("incoming-history"),
+                    kind: "completed",
+                    title: "Submitted production batch",
+                    detail: "Ready for internal verification",
+                    actor: titleCase(currentUserRole),
+                    createdAt: submittedAt,
+                  }),
+                ],
+              }
+            : incoming,
+        ),
+      );
+
+      pushToast({
+        title: "Production batch submitted",
+        description: "The internal team can now receive this craftsman report.",
+        variant: "success",
+      });
+    },
+    [currentUserRole, pushToast],
+  );
+
+  const startReceivingIncoming = useCallback(
+    (incomingId: string) => {
+      const receivingAt = new Date().toISOString();
+
+      setBatches((current) =>
+        current.map((incoming) =>
+          incoming.id === incomingId && incoming.status !== "completed"
+            ? {
+                ...incoming,
+                status: "receiving",
+                receivingAt,
+                updatedAt: receivingAt,
+                history: [
+                  ...incoming.history,
+                  createActivityEntry({
+                    id: makeId("incoming-history"),
+                    kind: "completed",
+                    title: "Started receiving production batch",
+                    detail: "Checklist verification started",
+                    actor: titleCase(currentUserRole),
+                    createdAt: receivingAt,
+                  }),
+                ],
+              }
+            : incoming,
+        ),
+      );
+
+      pushToast({
+        title: "Receiving started",
+        description: "Checklist verification is now active for this production batch.",
+        variant: "success",
+      });
+    },
+    [currentUserRole, pushToast],
+  );
+
+  const completeIncoming = useCallback(
+    (incomingId: string) => {
+      const incoming = batches.find((entry) => entry.id === incomingId);
+      if (!incoming || incoming.status === "completed") return;
 
       const createdAt = new Date().toISOString();
-      const stockDeltas = new Map<string, number>();
-
-      for (const item of batch.items) {
-        if (!item.checked || item.receivedQty <= 0) {
-          continue;
-        }
-
-        stockDeltas.set(
-          item.productId,
-          (stockDeltas.get(item.productId) ?? 0) + item.receivedQty,
-        );
-      }
+      const stockDeltas = getBatchReceivedByProduct(incoming);
 
       setProducts((current) =>
         current.map((product) => {
@@ -1146,7 +1279,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
             ...product,
             currentStock: {
               ...product.currentStock,
-              [batch.source]: product.currentStock[batch.source] + delta,
+              [incoming.source]: product.currentStock[incoming.source] + delta,
             },
             updatedAt: createdAt,
           };
@@ -1154,62 +1287,62 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       );
 
       setMovements((current) => [
-        ...batch.items
-          .filter((item) => item.checked && item.receivedQty > 0)
-          .map((item) => ({
+        ...Array.from(stockDeltas.entries())
+          .filter(([, qty]) => qty > 0)
+          .map(([productId, qty]) => ({
             id: makeId("mv"),
-            productId: item.productId,
-            qtyDelta: item.receivedQty,
-            destinationStockKey: batch.source,
+            productId,
+            qtyDelta: qty,
+            destinationStockKey: incoming.source,
             source: "production_batch_receive" as const,
             createdAt,
             actor: currentUserRole,
-            batchId,
-            reason: `Received through ${batch.name}`,
+            batchId: incomingId,
+            reason: `Completed through ${incoming.name}`,
           })),
         ...current,
       ]);
 
       setBatches((current) =>
         current.map((entry) =>
-          entry.id === batchId
+          entry.id === incomingId
             ? {
-                  ...entry,
-                  status: "completed",
-                  completedAt: createdAt,
-                  updatedAt: createdAt,
-                  history: [
-                    ...entry.history,
-                    createActivityEntry({
-                      id: makeId("batch-history"),
-                      kind: "completed",
-                      title: "Completed batch",
-                      detail: `Updated stock for ${getSourceLabel(entry.source)}`,
-                      actor: titleCase(currentUserRole),
-                      createdAt,
-                    }),
-                  ],
-                }
+                ...entry,
+                status: "completed",
+                completedAt: createdAt,
+                updatedAt: createdAt,
+                history: [
+                  ...entry.history,
+                  createActivityEntry({
+                    id: makeId("incoming-history"),
+                    kind: "completed",
+                    title: "Completed production batch",
+                    detail: `Updated stock for ${getSourceLabel(entry.source)}`,
+                    actor: titleCase(currentUserRole),
+                    createdAt,
+                  }),
+                ],
+              }
             : entry,
         ),
       );
 
       syncTimestamp();
       pushToast({
-        title: "Batch completed",
-        description: `Received quantities updated ${batch.source} stock directly.`,
+        title: "Production batch completed",
+        description: `${getSourceLabel(incoming.source)} stock was updated from the checked receiving list.`,
         variant: "success",
       });
     },
     [batches, currentUserRole, pushToast, syncTimestamp],
   );
 
-  const deleteBatch = useCallback(
-    (batchId: string) => {
-      setBatches((current) => current.filter((batch) => batch.id !== batchId));
+  const deleteIncoming = useCallback(
+    (incomingId: string) => {
+      setBatches((current) => current.filter((incoming) => incoming.id !== incomingId));
       pushToast({
-        title: "Batch deleted",
-        description: "The draft batch was removed.",
+        title: "Production batch deleted",
+        description: "The production batch was removed.",
       });
     },
     [pushToast],
@@ -1244,10 +1377,12 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       archiveProduct,
       updateThreshold,
       adjustStock,
-      createBatch,
-      updateBatch,
-      completeBatch,
-      deleteBatch,
+      createIncoming,
+      updateIncoming,
+      submitIncoming,
+      startReceivingIncoming,
+      completeIncoming,
+      deleteIncoming,
       dismissToast,
     }),
     [
@@ -1256,14 +1391,16 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       batches,
       categories,
       createProductionPlan,
-      createBatch,
+      createIncoming,
       createCategory,
       createProduct,
-      completeBatch,
+      completeIncoming,
       completeProductionPlan,
+      deleteIncoming,
+      submitIncoming,
+      updateIncoming,
       updateProductionPlan,
       currentUserRole,
-      deleteBatch,
       deleteProductionPlan,
       dismissToast,
       lastSyncedAt,
@@ -1278,8 +1415,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       toasts,
       updateProductPricing,
       archiveProduct,
-      updateBatch,
       updateThreshold,
+      startReceivingIncoming,
     ],
   );
 

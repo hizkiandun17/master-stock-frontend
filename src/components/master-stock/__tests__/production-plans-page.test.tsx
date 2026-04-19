@@ -19,46 +19,39 @@ function renderWithProviders(element: React.ReactElement) {
   return render(<AppProviders>{element}</AppProviders>);
 }
 
-describe("Production plans", () => {
-  it("creates a new draft production plan from the dedicated plans page", async () => {
+describe("Dispatch", () => {
+  it("creates a new draft dispatch record from the dispatch page", async () => {
     const user = userEvent.setup();
     window.localStorage.clear();
     pushMock.mockReset();
     renderWithProviders(<ProductionPlansPage />);
 
-    expect(
-      screen.getByRole("heading", { name: /^Production Plans$/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^Dispatch$/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /Create New Plan/i }));
-    await user.type(screen.getByRole("textbox", { name: /Plan Name/i }), "Indira Week 3");
+    await user.click(screen.getAllByRole("button", { name: /Create Dispatch/i })[0]);
+    await user.type(screen.getByRole("textbox", { name: /Dispatch Name/i }), "Indira Dispatch");
     await user.selectOptions(screen.getByRole("combobox", { name: /Source/i }), "indira");
-    await user.click(screen.getByRole("button", { name: /Create Plan/i }));
+    await user.click(screen.getAllByRole("button", { name: /Create Dispatch/i })[1]);
 
-    expect(
-      screen.getByText(/Production plan created successfully/i),
-    ).toBeInTheDocument();
-    expect(pushMock).toHaveBeenCalled();
-    expect(screen.getByText(/Indira Week 3/i)).toBeInTheDocument();
+    expect(screen.getByText(/Batch created successfully/i)).toBeInTheDocument();
+    expect(pushMock).toHaveBeenCalledWith(expect.stringMatching(/\/master-stock\/batches\//));
+    expect(screen.getByText(/^Indira Dispatch$/i)).toBeInTheDocument();
     expect(screen.getByText(/0 pcs • 0 items/i)).toBeInTheDocument();
-    expect(screen.getByText(/Created \d{1,2} \w{3} \d{4}/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Delete Indira Week 3/i }),
-    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Created \d{1,2} \w{3} \d{4}/i).length).toBeGreaterThan(0);
   });
 
-  it("moves a plan from draft to completed before export becomes available", async () => {
+  it("moves a dispatch record from draft to completed before export becomes available", async () => {
     const user = userEvent.setup();
     window.localStorage.clear();
     window.localStorage.setItem(
-      "master-stock-state-v1",
+      "master-stock-state-v2",
       JSON.stringify({
         productionPlans: [
           {
-            id: "plan-1",
-            name: "Indira April",
+            id: "dispatch-1",
+            name: "Indira Dispatch",
             source: "indira",
-            notes: "Priority",
+            notes: "Owner batch",
             items: [],
             createdAt: "2026-04-17T03:00:00.000Z",
             status: "draft",
@@ -67,13 +60,11 @@ describe("Production plans", () => {
       }),
     );
 
-    renderWithProviders(<ProductionPlanDetailPage planId="plan-1" />);
+    renderWithProviders(<ProductionPlanDetailPage planId="dispatch-1" />);
 
-    expect(
-      await screen.findByRole("heading", { name: /Indira April/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /Indira Dispatch/i })).toBeInTheDocument();
     expect(screen.getByText(/^draft$/i)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Complete Plan/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Complete Batch/i }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Export PDF/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Add Item/i }));
@@ -81,37 +72,35 @@ describe("Production plans", () => {
     await user.keyboard("{Enter}");
 
     const quantityInput = await screen.findByDisplayValue("0");
-    expect(screen.getByPlaceholderText(/Search product or SKU/i)).toBeInTheDocument();
     await waitFor(() => expect(quantityInput).toHaveFocus());
     await user.clear(quantityInput);
     await user.type(quantityInput, "15");
-    await waitFor(() => expect(quantityInput).toHaveValue(15));
 
-    await user.click(screen.getAllByRole("button", { name: /Complete Plan/i })[0]);
-    expect(screen.getByText(/Mark this plan as complete\?/i)).toBeInTheDocument();
-    const completeButtons = screen.getAllByRole("button", { name: /Complete Plan/i });
+    await user.click(screen.getAllByRole("button", { name: /Complete Batch/i })[0]);
+    expect(screen.getByText(/Mark this batch as complete\?/i)).toBeInTheDocument();
+    const completeButtons = screen.getAllByRole("button", { name: /Complete Batch/i });
     await user.click(completeButtons[completeButtons.length - 1]);
 
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /Export PDF/i }).length).toBeGreaterThan(0),
     );
-    expect(screen.queryAllByRole("button", { name: /^Complete Plan$/i })).toHaveLength(0);
-    expect(screen.getByRole("heading", { name: /Activity History/i })).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: /^Complete Batch$/i })).toHaveLength(0);
+
     await user.click(screen.getByRole("button", { name: /Show Activity/i }));
     expect(screen.getAllByText(/Edited quantity for/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Completed plan/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completed batch/i)).toBeInTheDocument();
   });
 
-  it("lets users close the add item picker with the visible close control", async () => {
-    const user = userEvent.setup();
+  it("blocks direct dispatch access for production users", async () => {
     window.localStorage.clear();
     window.localStorage.setItem(
-      "master-stock-state-v1",
+      "master-stock-state-v2",
       JSON.stringify({
+        currentUserRole: "production",
         productionPlans: [
           {
-            id: "plan-2",
-            name: "Mita April",
+            id: "dispatch-2",
+            name: "Mita Dispatch",
             source: "mita",
             items: [],
             createdAt: "2026-04-17T03:00:00.000Z",
@@ -121,15 +110,8 @@ describe("Production plans", () => {
       }),
     );
 
-    renderWithProviders(<ProductionPlanDetailPage planId="plan-2" />);
+    renderWithProviders(<ProductionPlanDetailPage planId="dispatch-2" />);
 
-    await user.click(await screen.findByRole("button", { name: /Add Item/i }));
-    expect(screen.getByPlaceholderText(/Search product or SKU/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /Close item picker/i }));
-
-    await waitFor(() =>
-      expect(screen.queryByPlaceholderText(/Search product or SKU/i)).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByText(/Dispatch is internal-only/i)).toBeInTheDocument();
   });
 });

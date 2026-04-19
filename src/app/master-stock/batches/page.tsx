@@ -1,5 +1,5 @@
-import { BatchesPage } from "@/components/master-stock/batches-page";
+import { ProductionPlansPage } from "@/components/master-stock/production-plans-page";
 
 export default function BatchListRoute() {
-  return <BatchesPage />;
+  return <ProductionPlansPage />;
 }
