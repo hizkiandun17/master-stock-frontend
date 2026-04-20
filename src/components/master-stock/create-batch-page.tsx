@@ -28,6 +28,7 @@ export function CreateBatchPage() {
   const [items, setItems] = useState<BatchPlannedItem[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState("");
+  const [isDesktop, setIsDesktop] = useState(false);
   const pendingFocusProductId = useRef<string | null>(null);
   const plannedInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -56,6 +57,20 @@ export function CreateBatchPage() {
   }, [mobileSearch, products]);
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const syncLayout = () => setIsDesktop(mediaQuery.matches);
+
+    syncLayout();
+    mediaQuery.addEventListener("change", syncLayout);
+
+    return () => mediaQuery.removeEventListener("change", syncLayout);
+  }, []);
 
   useEffect(() => {
     if (items.length > 0) {
@@ -220,7 +235,8 @@ export function CreateBatchPage() {
           </Button>
         </div>
 
-        <div className="space-y-3 md:hidden">
+        {!isDesktop ? (
+        <div className="space-y-3">
           <Link
             href="/master-stock/incoming"
             className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
@@ -244,6 +260,7 @@ export function CreateBatchPage() {
             </div>
           </div>
         </div>
+        ) : null}
 
         <Card className="border-white/10">
           <CardContent className="space-y-4 p-4 md:p-5">
@@ -259,7 +276,8 @@ export function CreateBatchPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4 md:hidden">
+        {!isDesktop ? (
+        <div className="space-y-4">
           <Card className="border-white/10">
             <CardContent className="space-y-4 p-4">
               <div className="relative">
@@ -268,6 +286,19 @@ export function CreateBatchPage() {
                   ref={mobileSearchInputRef}
                   value={mobileSearch}
                   onChange={(event) => setMobileSearch(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") {
+                      return;
+                    }
+
+                    const firstMatch = filteredMobileProducts[0];
+                    if (!firstMatch) {
+                      return;
+                    }
+
+                    event.preventDefault();
+                    addProduct(firstMatch.id);
+                  }}
                   placeholder="Search or add item..."
                   className="h-14 pl-11 text-base"
                 />
@@ -342,15 +373,17 @@ export function CreateBatchPage() {
                       </div>
                       <Input
                         ref={(node) => {
-                          plannedInputRefs.current.set(item.productId ?? "", node);
-                          if (pendingFocusProductId.current === item.productId && node) {
-                            window.requestAnimationFrame(() => {
-                              node.scrollIntoView({ block: "center", behavior: "smooth" });
-                              node.focus();
-                              node.select();
-                              pendingFocusProductId.current = null;
-                            });
-                          }
+                              plannedInputRefs.current.set(item.productId ?? "", node);
+                              if (pendingFocusProductId.current === item.productId && node) {
+                                window.requestAnimationFrame(() => {
+                                  if (typeof node.scrollIntoView === "function") {
+                                    node.scrollIntoView({ block: "center", behavior: "smooth" });
+                                  }
+                                  node.focus();
+                                  node.select();
+                                  pendingFocusProductId.current = null;
+                                });
+                              }
                         }}
                         type="number"
                         min="0"
@@ -378,8 +411,10 @@ export function CreateBatchPage() {
             </div>
           )}
         </div>
+        ) : null}
 
-        <div className="hidden md:block">
+        {isDesktop ? (
+        <div>
           <Card className="border-white/10">
             <CardContent className="space-y-4 p-4 md:p-5">
               <div className="relative">
@@ -470,6 +505,7 @@ export function CreateBatchPage() {
             </CardContent>
           </Card>
         </div>
+        ) : null}
       </section>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">

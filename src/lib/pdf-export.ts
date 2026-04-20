@@ -3,12 +3,13 @@
 import { getCategoryName } from "@/lib/stock-helpers";
 import type {
   Category,
+  ProductionBatch,
   Product,
   ProductionPlan,
   ProductionPlanSource,
   StockLocationKey,
 } from "@/lib/types";
-import { formatNumber, titleCase } from "@/lib/utils";
+import { formatDate, formatDateTime, formatNumber, titleCase } from "@/lib/utils";
 
 type PdfColumnKey = "no" | "product" | "inStock" | "indira" | "mita" | "total";
 
@@ -56,6 +57,14 @@ interface ExportSingleProductionPlanPdfOptions {
   plan: ProductionPlan;
   products: Product[];
   categories: Category[];
+  fileName?: string;
+}
+
+interface ExportProductionBatchPdfOptions {
+  batch: ProductionBatch;
+  products: Product[];
+  categories: Category[];
+  reportType: "temporary" | "final";
   fileName?: string;
 }
 
@@ -337,4 +346,133 @@ export async function exportSingleProductionPlanPdf({
         .toISOString()
         .slice(0, 10)}.pdf`,
   });
+}
+
+function getBatchItemName(batch: ProductionBatch, productId: string | undefined, products: Product[]) {
+  if (!productId) {
+    return "Custom item";
+  }
+
+  return products.find((product) => product.id === productId)?.name ?? productId;
+}
+
+export async function exportProductionBatchPdf({
+  batch,
+  products,
+  categories,
+  reportType,
+  fileName,
+}: ExportProductionBatchPdfOptions) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 56;
+  let cursorY = 72;
+
+  const isTemporary = reportType === "temporary";
+  const reportTitle = isTemporary
+    ? "Temporary Stock Report (Unverified)"
+    : "Final Verified Stock Report";
+  const reportDateLabel = isTemporary
+    ? `Submitted: ${batch.submittedAt ? formatDateTime(batch.submittedAt) : formatDate(batch.createdAt)}`
+    : `Completed: ${batch.completedAt ? formatDateTime(batch.completedAt) : formatDate(batch.updatedAt)}`;
+
+  const rows = (isTemporary ? batch.items : batch.items.filter((item) => item.checked)).map((item, index) => {
+    const product = item.productId
+      ? products.find((entry) => entry.id === item.productId)
+      : undefined;
+    const itemName = item.isCustom
+      ? item.customName?.trim() || "Custom item"
+      : getBatchItemName(batch, item.productId, products);
+    const detail = item.isCustom
+      ? item.note?.trim()
+        ? `Temporary custom item • ${item.note.trim()}`
+        : "Temporary custom item"
+      : product
+        ? `${product.sku} • ${getCategoryName(product.categoryId, categories)}`
+        : "Missing from master stock";
+
+    return {
+      no: String(index + 1),
+      item: itemName,
+      detail,
+      qty: `${formatNumber(item.quantity)} pcs`,
+    };
+  });
+
+  const totalQuantity = (isTemporary ? batch.items : batch.items.filter((item) => item.checked)).reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(39, 39, 42);
+  doc.text(reportTitle, marginX, cursorY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(12);
+  doc.setTextColor(82, 82, 91);
+  doc.text(batch.name?.trim() || `${titleCase(batch.source)} Production Batch`, marginX, cursorY + 24);
+
+  const headerLines = [
+    `Batch: ${batch.name?.trim() || `${titleCase(batch.source)} Production Batch`}`,
+    `Source: ${titleCase(batch.source)}`,
+    reportDateLabel,
+    `Total Quantity: ${formatNumber(totalQuantity)} pcs`,
+  ];
+
+  headerLines.forEach((line, index) => {
+    doc.text(line, pageWidth - marginX, cursorY + index * 16, { align: "right" });
+  });
+
+  cursorY += 96;
+
+  autoTable(doc, {
+    startY: cursorY,
+    margin: { left: marginX, right: marginX },
+    tableWidth: pageWidth - marginX * 2,
+    theme: "grid",
+    head: [["No.", "Item", "Details", "Quantity"]],
+    body: rows,
+    columns: [
+      { header: "No.", dataKey: "no" },
+      { header: "Item", dataKey: "item" },
+      { header: "Details", dataKey: "detail" },
+      { header: "Quantity", dataKey: "qty" },
+    ],
+    styles: {
+      font: "helvetica",
+      fontSize: 10,
+      cellPadding: { top: 10, right: 10, bottom: 10, left: 10 },
+      lineColor: [228, 228, 231],
+      lineWidth: 0.8,
+      textColor: [24, 24, 27],
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [248, 250, 252],
+      textColor: [82, 82, 91],
+      fontStyle: "bold",
+    },
+    columnStyles: {
+      no: { cellWidth: 36, halign: "center" },
+      item: { cellWidth: 210 },
+      detail: { cellWidth: 220 },
+      qty: { cellWidth: 90, halign: "left", fontStyle: "bold" },
+    },
+  });
+
+  const defaultFileName = isTemporary
+    ? `OSHE_Production-Batch-Temporary_${new Date(batch.createdAt).toISOString().slice(0, 10)}.pdf`
+    : `OSHE_Production-Batch-Final_${new Date(batch.updatedAt).toISOString().slice(0, 10)}.pdf`;
+
+  doc.save(fileName ?? defaultFileName);
 }

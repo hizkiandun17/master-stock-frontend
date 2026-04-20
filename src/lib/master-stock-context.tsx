@@ -362,7 +362,10 @@ function normalizeBatches(input: ProductionBatch[]): ProductionBatch[] {
             typeof item.mappedProductId === "string" && item.mappedProductId.trim()
               ? item.mappedProductId
               : undefined,
-          checked: batch.status === "completed" ? true : Boolean(item.checked),
+          checked:
+            typeof item.checked === "boolean"
+              ? item.checked
+              : batch.status === "completed",
           quantity: Math.max(0, item.quantity),
         }))
       : Array.isArray((batch as ProductionBatch & {

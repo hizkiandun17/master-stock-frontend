@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useMasterStock } from "@/lib/master-stock-context";
+import { exportProductionBatchPdf } from "@/lib/pdf-export";
 import { getBatchStatusLabel, getBatchTotals, getCategoryName } from "@/lib/stock-helpers";
 import type { BatchPlannedItem, Product } from "@/lib/types";
 import { cn, formatDate, formatDateTime, titleCase } from "@/lib/utils";
@@ -88,6 +89,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const [customItemQuantity, setCustomItemQuantity] = useState("0");
   const [customItemNote, setCustomItemNote] = useState("");
   const [mobileSearch, setMobileSearch] = useState("");
+  const [isDesktop, setIsDesktop] = useState(false);
   const quantityInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const pendingFocusItemId = useRef<string | null>(null);
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -120,6 +122,20 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       return `${product.name} ${product.sku}`.toLowerCase().includes(query);
     });
   }, [mobileSearch, safeProducts]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const syncLayout = () => setIsDesktop(mediaQuery.matches);
+
+    syncLayout();
+    mediaQuery.addEventListener("change", syncLayout);
+
+    return () => mediaQuery.removeEventListener("change", syncLayout);
+  }, []);
 
   useEffect(() => {
     if (!pendingFocusItemId.current) {
@@ -483,7 +499,8 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
 
           {isEditableDraft ? (
             <>
-              <div className="space-y-4 md:hidden">
+              {!isDesktop ? (
+              <div className="space-y-4">
                 <Card className="border-white/10">
                   <CardContent className="space-y-4 p-4">
                     <div className="relative">
@@ -492,6 +509,19 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                         ref={mobileSearchInputRef}
                         value={mobileSearch}
                         onChange={(event) => setMobileSearch(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") {
+                            return;
+                          }
+
+                          const firstMatch = filteredMobileProducts[0];
+                          if (!firstMatch) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                          addProduct(firstMatch.id);
+                        }}
                         placeholder="Search or add item..."
                         className="h-14 pl-11 text-base"
                       />
@@ -572,7 +602,9 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                                 quantityInputRefs.current.set(item.id, node);
                                 if (pendingFocusItemId.current === item.id && node) {
                                   window.requestAnimationFrame(() => {
-                                    node.scrollIntoView({ block: "center", behavior: "smooth" });
+                                    if (typeof node.scrollIntoView === "function") {
+                                      node.scrollIntoView({ block: "center", behavior: "smooth" });
+                                    }
                                     node.focus();
                                     node.select();
                                     pendingFocusItemId.current = null;
@@ -603,8 +635,10 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   </div>
                 )}
               </div>
+              ) : null}
 
-              <div className="hidden md:block">
+              {isDesktop ? (
+              <div>
                 <Card className="border-white/10">
                   <CardContent className="space-y-5 p-4 md:p-5">
                     <div className="relative">
@@ -702,6 +736,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   </CardContent>
                 </Card>
               </div>
+              ) : null}
             </>
           ) : (
             <Card className="border-white/10">
@@ -785,6 +820,23 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
             </div>
 
             <div className="hidden w-full flex-col gap-2 sm:w-auto sm:flex-row md:flex">
+              {activeIncoming.status === "submitted" ? (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    exportProductionBatchPdf({
+                      batch: activeIncoming,
+                      products: safeProducts,
+                      categories: safeCategories,
+                      reportType: "temporary",
+                    })
+                  }
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Export Temporary PDF
+                </Button>
+              ) : null}
+
               {(activeIncoming.status === "draft" || activeIncoming.status === "submitted") ? (
                 <Button
                   onClick={() =>
@@ -807,6 +859,23 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 >
                   <Check className="mr-2 h-4 w-4" />
                   Update & Complete
+                </Button>
+              ) : null}
+
+              {activeIncoming.status === "completed" ? (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    exportProductionBatchPdf({
+                      batch: activeIncoming,
+                      products: safeProducts,
+                      categories: safeCategories,
+                      reportType: "final",
+                    })
+                  }
+                  className="min-h-11 w-full sm:w-auto"
+                >
+                  Export Final PDF
                 </Button>
               ) : null}
             </div>

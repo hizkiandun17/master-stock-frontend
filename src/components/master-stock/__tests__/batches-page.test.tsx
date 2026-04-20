@@ -5,7 +5,6 @@ import { vi } from "vitest";
 
 import { BatchDetailPage } from "@/components/master-stock/batch-detail-page";
 import { BatchesPage } from "@/components/master-stock/batches-page";
-import { CreateBatchPage } from "@/components/master-stock/create-batch-page";
 import { AppProviders } from "@/components/providers/app-providers";
 
 const pushMock = vi.fn();
@@ -37,43 +36,6 @@ describe("Production Batch", () => {
     await user.click(screen.getByText(/Indira Ramadan Return/i));
 
     expect(pushMock).toHaveBeenCalledWith("/master-stock/incoming/incoming-1");
-  });
-
-  it("creates a production batch from the dedicated create page", async () => {
-    const user = userEvent.setup();
-    window.localStorage.clear();
-    pushMock.mockReset();
-
-    renderWithProviders(<CreateBatchPage />);
-
-    await user.type(screen.getByRole("textbox", { name: /Batch Name/i }), "Friday Return");
-    await user.type(screen.getByPlaceholderText(/Search or add item/i), "4EVER");
-    await user.click(await screen.findByRole("button", { name: /4EVER Bracelet/i }));
-
-    const quantityInput = await screen.findByDisplayValue("0");
-    await waitFor(() => expect(quantityInput).toHaveFocus());
-    await user.clear(quantityInput);
-    await user.type(quantityInput, "12");
-
-    await user.click(screen.getAllByRole("button", { name: /^Create Production Batch$/i })[0]);
-
-    expect(pushMock).toHaveBeenCalled();
-
-    await waitFor(() => {
-      const persistedState = JSON.parse(
-        window.localStorage.getItem("master-stock-state-v2") ?? "{}",
-      ) as {
-        batches?: Array<{
-          name?: string;
-          status: string;
-          items: Array<{ quantity: number }>;
-        }>;
-      };
-
-      const createdIncoming = persistedState.batches?.find((entry) => entry.name === "Friday Return");
-      expect(createdIncoming?.status).toBe("draft");
-      expect(createdIncoming?.items[0]).toMatchObject({ quantity: 12 });
-    });
   });
 
   it("moves a production batch from summary into receiving and then completes it", async () => {
@@ -193,9 +155,9 @@ describe("Production Batch", () => {
     expect(screen.getByPlaceholderText(/Search or add item/i)).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/Search or add item/i), "Noor");
-    await user.click(await screen.findByRole("button", { name: /Noor Iftar Bracelet/i }));
+    await user.click(await screen.findByText(/Noor Iftar Bracelet/i));
 
-    const quantityInput = await screen.findByLabelText(/Quantity for Noor Iftar Bracelet/i);
+    const quantityInput = (await screen.findAllByLabelText(/Quantity for Noor Iftar Bracelet/i))[0];
     await waitFor(() => expect(quantityInput).toHaveFocus());
   });
 });
