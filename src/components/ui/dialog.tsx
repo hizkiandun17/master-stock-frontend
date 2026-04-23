@@ -14,6 +14,7 @@ interface DialogProps {
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  overlayClassName?: string;
   headerClassName?: string;
   bodyClassName?: string;
   titleClassName?: string;
@@ -28,6 +29,7 @@ export function Dialog({
   children,
   footer,
   className,
+  overlayClassName,
   headerClassName,
   bodyClassName,
   titleClassName,
@@ -77,7 +79,10 @@ export function Dialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[120] flex items-end justify-center bg-black/50 p-0 md:items-center md:p-6 animate-[dialog-overlay-in_160ms_ease-out]"
+      className={cn(
+        "fixed inset-0 z-[120] flex items-end justify-center bg-black/50 p-0 md:items-center md:p-6 animate-[dialog-overlay-in_160ms_ease-out]",
+        overlayClassName,
+      )}
       onClick={() => onOpenChange(false)}
       data-testid="dialog-overlay"
     >

@@ -271,6 +271,22 @@ function normalizeCategories(input: Category[]) {
     .map((category, index) => ({ ...category, order: index }));
 }
 
+function mergeDefaultCategories(input: Category[]) {
+  const existingIds = new Set(input.map((category) => category.id));
+  return normalizeCategories([
+    ...input,
+    ...defaultCategories.filter((category) => !existingIds.has(category.id)),
+  ]);
+}
+
+function mergeDefaultProducts(input: Product[]) {
+  const existingIds = new Set(input.map((product) => product.id));
+  return [
+    ...input,
+    ...defaultProducts.filter((product) => !existingIds.has(product.id)),
+  ];
+}
+
 function normalizeProductionPlans(input: ProductionPlan[]): ProductionPlan[] {
   return input.map((plan, index): ProductionPlan => ({
     id: plan.id,
@@ -430,8 +446,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
         currentUserRole: UserRole;
       }>;
 
-      if (parsed.products) setProducts(parsed.products);
-      if (parsed.categories) setCategories(normalizeCategories(parsed.categories));
+      if (parsed.products) setProducts(mergeDefaultProducts(parsed.products));
+      if (parsed.categories) setCategories(mergeDefaultCategories(parsed.categories));
       if (parsed.productionPlans) setProductionPlans(normalizeProductionPlans(parsed.productionPlans));
       if (parsed.batches) setBatches(normalizeBatches(parsed.batches));
       if (parsed.movements) setMovements(parsed.movements);

@@ -181,11 +181,11 @@ function buildQrMatrix(seed: string) {
   });
 }
 
-function QrCodeMock({ sku }: { sku: string }) {
+function QrCodeMock({ sku, className }: { sku: string; className?: string }) {
   const matrix = buildQrMatrix(sku);
 
   return (
-    <div className="mx-auto w-full max-w-[156px] rounded-2xl bg-white p-3">
+    <div className={cn("mx-auto w-full max-w-[156px] rounded-2xl bg-white p-3", className)}>
       <div className="grid grid-cols-[repeat(21,minmax(0,1fr))] gap-px">
         {matrix.map((filled, index) => (
           <div
@@ -198,13 +198,19 @@ function QrCodeMock({ sku }: { sku: string }) {
   );
 }
 
-function ProductPreview({ product }: { product: Product }) {
+function ProductPreview({ product, className }: { product: Product; className?: string }) {
   const tint = hashString(product.sku) % 3;
   const accentClass =
     tint === 0 ? "from-amber-200/60 via-stone-100 to-white" : tint === 1 ? "from-slate-200/60 via-stone-100 to-white" : "from-zinc-200/60 via-stone-100 to-white";
 
   return (
-    <div className={cn("flex aspect-square items-center justify-center overflow-hidden rounded-[22px] bg-gradient-to-br p-8", accentClass)}>
+    <div
+      className={cn(
+        "flex aspect-square items-center justify-center overflow-hidden rounded-[22px] bg-gradient-to-br p-8",
+        accentClass,
+        className,
+      )}
+    >
       <div className="relative flex h-full w-full items-center justify-center">
         <div className="absolute h-28 w-28 rounded-full border-[10px] border-[#c9a76a] opacity-80" />
         <div className="absolute h-32 w-32 rounded-full border border-[#ead6ad] opacity-70" />
@@ -946,7 +952,7 @@ export function OverviewPage() {
                   paginatedProducts.map((product) => (
                     <div
                       key={product.id}
-                      className="rounded-[20px] border border-white/10 bg-card p-4"
+                      className="rounded-[18px] border border-white/10 bg-card px-4 py-3.5 transition-colors active:bg-white/[0.04]"
                       onClick={() => setSelectedProduct(product)}
                       role="button"
                       tabIndex={0}
@@ -957,51 +963,19 @@ export function OverviewPage() {
                         }
                       }}
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1 space-y-1">
-                          <p className="line-clamp-2 text-base font-medium leading-snug text-foreground">
+                          <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
                             {product.name}
                           </p>
                           <p className="text-xs text-muted-foreground">{product.sku}</p>
                         </div>
-                        <div onClick={stopRowClick}>
-                          <StockActionMenu
-                            product={product}
-                            open={openActionMenuId === product.id}
-                            onToggle={() =>
-                              setOpenActionMenuId((current) =>
-                                current === product.id ? null : product.id,
-                              )
-                            }
-                            actionMenuRef={actionMenuRef}
-                            onView={() => {
-                              setOpenActionMenuId(null);
-                              setSelectedProduct(product);
-                            }}
-                            onEdit={() => openEditStock(product)}
-                            onDelete={() => handleDelete(product)}
-                            onArchive={() => handleArchive(product)}
-                            onHistory={() => handleViewHistory(product)}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="mt-4 space-y-3 text-sm">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">Category</span>
-                          <span className="max-w-[65%] text-right text-foreground">
-                            {getCategoryName(product.categoryId, sortedCategories)}
-                          </span>
-                        </div>
-                        <div className="rounded-2xl bg-white/[0.03] px-3 py-3">
-                          <p className="text-sm font-medium text-foreground">
-                            In Stock: {product.currentStock.warehouse}
+                        <div className="shrink-0 text-right">
+                          <p className="text-lg font-semibold leading-none tracking-tight text-foreground">
+                            {getProductTotal(product)}
                           </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Indira: {product.currentStock.indira} | Mita: {product.currentStock.mita}
-                          </p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Total: {getProductTotal(product)}
+                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Total
                           </p>
                         </div>
                       </div>
@@ -1138,103 +1112,119 @@ export function OverviewPage() {
 
       <Dialog
         open={Boolean(selectedProduct)}
-        onOpenChange={(open) => !open && setSelectedProduct(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedProduct(null);
+          }
+        }}
         title={selectedProduct?.name ?? "Product details"}
         description={selectedProduct ? `SKU: ${selectedProduct.sku}` : undefined}
-        className="border-white/10 bg-[#09090b] md:max-w-4xl"
-        headerClassName="border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6"
-        bodyClassName="px-4 pb-5 pt-1 md:px-6 md:pb-6"
-        titleClassName="text-[24px] font-semibold leading-tight tracking-tight md:text-[30px]"
+        overlayClassName={isMobileViewport ? "items-center p-4" : undefined}
+        className={cn(
+          "border-white/10 bg-[#09090b] md:max-w-4xl",
+          isMobileViewport &&
+            "h-auto max-h-[calc(100vh-56px)] w-full max-w-[390px] rounded-[22px] border",
+        )}
+        headerClassName={cn(
+          "border-b-0 px-4 pb-2 pt-5 md:px-6 md:pt-6",
+          isMobileViewport &&
+            "relative block px-5 pb-2 pt-5 text-center [&>button]:absolute [&>button]:right-3 [&>button]:top-3 [&>div]:pr-8",
+        )}
+        bodyClassName={cn(
+          "px-4 pb-5 pt-1 md:px-6 md:pb-6",
+          isMobileViewport && "max-h-[calc(100vh-170px)] px-5 pb-5 pt-1",
+        )}
+        titleClassName="text-xl font-semibold leading-tight tracking-tight md:text-[30px]"
         descriptionClassName="text-sm text-muted-foreground"
       >
         {selectedProduct ? (
-          <div className="grid gap-6 md:gap-8 lg:grid-cols-[320px,1fr]">
+          isMobileViewport ? (
             <div className="space-y-5">
-              <ProductPreview product={selectedProduct} />
-              <div className="rounded-[22px] bg-white/[0.03] px-5 py-6">
-                <p className="text-center text-xs uppercase tracking-[0.24em] text-muted-foreground">
+              <ProductPreview product={selectedProduct} className="rounded-[18px] p-6" />
+
+              <div className="rounded-[18px] border border-white/[0.04] bg-white/[0.03] px-4 py-4">
+                <p className="mb-3 text-center text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                   Scan QR Code
                 </p>
-                <div className="mt-4">
-                  <QrCodeMock sku={selectedProduct.sku} />
-                </div>
-                <p className="mt-4 text-center text-sm text-muted-foreground">
+                <QrCodeMock
+                  sku={selectedProduct.sku}
+                  className="max-w-[126px] rounded-xl p-2"
+                />
+                <p className="mt-2 text-center text-xs text-muted-foreground">
                   {selectedProduct.sku}
                 </p>
               </div>
-            </div>
 
-            <div className="space-y-7">
               <div className="space-y-2">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                   Category
                 </p>
-                <p className="text-2xl font-medium tracking-tight">{detailCategoryName}</p>
+                <p className="text-sm font-medium uppercase tracking-wide text-foreground">
+                  {detailCategoryName}
+                </p>
               </div>
 
-              <div className="space-y-3">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              <div className="space-y-2.5">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                   Stock Distribution
                 </p>
-                <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4 sm:grid-cols-3">
+                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/[0.03] px-3 py-3 text-center">
                   <div>
-                    <p className="text-3xl font-semibold tracking-tight">
-                      {getProductTotal(selectedProduct)}
+                    <p className="text-lg font-semibold tracking-tight">
+                      {selectedProduct.currentStock.warehouse}
                     </p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                       In Stock
                     </p>
                   </div>
                   <div>
-                    <p className="text-2xl font-medium">{selectedProduct.currentStock.indira}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    <p className="text-lg font-semibold tracking-tight text-muted-foreground">
+                      {selectedProduct.currentStock.indira}
+                    </p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                       Indira
                     </p>
                   </div>
                   <div>
-                    <p className="text-2xl font-medium">{selectedProduct.currentStock.mita}</p>
-                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    <p className="text-lg font-semibold tracking-tight text-muted-foreground">
+                      {selectedProduct.currentStock.mita}
+                    </p>
+                    <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                       Mita
                     </p>
                   </div>
                 </div>
-                <p className="text-right text-sm text-muted-foreground">
+                <p className="text-right text-xs text-muted-foreground">
                   Total: {getProductTotal(selectedProduct)} pcs
                 </p>
               </div>
 
-              <div className="space-y-4 border-t border-border/70 pt-6">
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                      Consignment Price (IDR)
-                    </p>
-                  </div>
-                  <p className="text-3xl font-semibold tracking-tight">
-                    {formatIdr(detailConsignmentPrice)}
-                  </p>
+              <div className="space-y-3 border-t border-border/70 pt-4 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Consignment Price (IDR)
+                  </span>
+                  <span className="font-semibold">{formatIdr(detailConsignmentPrice)}</span>
                 </div>
-                <div className="flex items-end justify-between gap-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                      Wholesale Price (EUR)
-                    </p>
-                  </div>
-                  <p className="text-2xl font-medium text-muted-foreground">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                    Wholesale Price (EUR)
+                  </span>
+                  <span className="font-medium text-muted-foreground">
                     {formatEur(detailWholesalePrice)}
-                  </p>
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-[22px] bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+              <div className="space-y-3 rounded-[18px] border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
                   Wholesale Market Prices
                 </p>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs">
                   {detailMarketPrices.map((entry) => (
                     <div
-                      key={`${selectedProduct.id}-${entry.currency}`}
-                      className="flex items-center justify-between gap-3 text-sm"
+                      key={`${selectedProduct.id}-mobile-${entry.currency}`}
+                      className="flex items-center justify-between gap-3"
                     >
                       <span className="text-muted-foreground">{entry.currency}</span>
                       <span className="font-medium">{entry.value}</span>
@@ -1243,7 +1233,104 @@ export function OverviewPage() {
                 </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="grid gap-6 md:gap-8 lg:grid-cols-[320px,1fr]">
+              <div className="space-y-5">
+                <ProductPreview product={selectedProduct} />
+                <div className="rounded-[22px] bg-white/[0.03] px-5 py-6">
+                  <p className="text-center text-xs uppercase tracking-[0.24em] text-muted-foreground">
+                    Scan QR Code
+                  </p>
+                  <div className="mt-4">
+                    <QrCodeMock sku={selectedProduct.sku} />
+                  </div>
+                  <p className="mt-4 text-center text-sm text-muted-foreground">
+                    {selectedProduct.sku}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-7">
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Category
+                  </p>
+                  <p className="text-2xl font-medium tracking-tight">{detailCategoryName}</p>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Stock Distribution
+                  </p>
+                  <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4 sm:grid-cols-3">
+                    <div>
+                      <p className="text-3xl font-semibold tracking-tight">
+                        {getProductTotal(selectedProduct)}
+                      </p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        In Stock
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-medium">{selectedProduct.currentStock.indira}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Indira
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-2xl font-medium">{selectedProduct.currentStock.mita}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        Mita
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-right text-sm text-muted-foreground">
+                    Total: {getProductTotal(selectedProduct)} pcs
+                  </p>
+                </div>
+
+                <div className="space-y-4 border-t border-border/70 pt-6">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                        Consignment Price (IDR)
+                      </p>
+                    </div>
+                    <p className="text-3xl font-semibold tracking-tight">
+                      {formatIdr(detailConsignmentPrice)}
+                    </p>
+                  </div>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                        Wholesale Price (EUR)
+                      </p>
+                    </div>
+                    <p className="text-2xl font-medium text-muted-foreground">
+                      {formatEur(detailWholesalePrice)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 rounded-[22px] bg-white/[0.03] p-4">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    Wholesale Market Prices
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {detailMarketPrices.map((entry) => (
+                      <div
+                        key={`${selectedProduct.id}-${entry.currency}`}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <span className="text-muted-foreground">{entry.currency}</span>
+                        <span className="font-medium">{entry.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
         ) : null}
       </Dialog>
 
