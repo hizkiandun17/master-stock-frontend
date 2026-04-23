@@ -396,24 +396,6 @@ export function OverviewPage() {
     [categories],
   );
 
-  if (currentUserRole === "production") {
-    return (
-      <MasterStockShell currentPath="overview">
-        <section className="space-y-4">
-          <Card className="border-white/10">
-            <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Overview is internal-only</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Craftsman users work only in Production Batch. Master Stock overview and stock
-                management stay with the internal team.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      </MasterStockShell>
-    );
-  }
-
   const activeProducts = useMemo(
     () => products.filter((product) => !product.archived),
     [products],
@@ -582,6 +564,24 @@ export function OverviewPage() {
         .replace(".", ","),
     });
   }, [categories, selectedEditProduct]);
+
+  if (currentUserRole === "production") {
+    return (
+      <MasterStockShell currentPath="overview">
+        <section className="space-y-4">
+          <Card className="border-white/10">
+            <CardContent className="px-5 py-12">
+              <h1 className="text-xl font-semibold text-foreground">Overview is internal-only</h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Craftsman users work only in Production Batch. Master Stock overview and stock
+                management stay with the internal team.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+      </MasterStockShell>
+    );
+  }
 
   function resetSummaryFilter() {
     setTab("active");

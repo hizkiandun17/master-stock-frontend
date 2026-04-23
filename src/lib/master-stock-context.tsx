@@ -92,6 +92,7 @@ interface MasterStockContextValue {
     items?: BatchPlannedItem[];
   }) => void;
   submitIncoming: (incomingId: string) => void;
+  cancelIncomingSubmission: (incomingId: string) => void;
   startReceivingIncoming: (incomingId: string) => void;
   completeIncoming: (incomingId: string) => void;
   deleteIncoming: (incomingId: string) => void;
@@ -1102,7 +1103,11 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     }) => {
       setBatches((current) =>
         current.map((incoming) => {
-          if (incoming.id !== incomingId || incoming.status === "completed") {
+          if (
+            incoming.id !== incomingId ||
+            incoming.status === "submitted" ||
+            incoming.status === "completed"
+          ) {
             return incoming;
           }
 
@@ -1244,13 +1249,50 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
     [currentUserRole, pushToast],
   );
 
+  const cancelIncomingSubmission = useCallback(
+    (incomingId: string) => {
+      const cancelledAt = new Date().toISOString();
+
+      setBatches((current) =>
+        current.map((incoming) =>
+          incoming.id === incomingId && incoming.status === "submitted"
+            ? {
+                ...incoming,
+                status: "draft",
+                submittedAt: undefined,
+                updatedAt: cancelledAt,
+                history: [
+                  ...incoming.history,
+                  createActivityEntry({
+                    id: makeId("incoming-history"),
+                    kind: "edited",
+                    title: "Cancelled production batch submission",
+                    detail: "Returned to draft before internal receiving",
+                    actor: titleCase(currentUserRole),
+                    createdAt: cancelledAt,
+                  }),
+                ],
+              }
+            : incoming,
+        ),
+      );
+
+      pushToast({
+        title: "Submission cancelled",
+        description: "The batch is back in draft and can be edited again.",
+        variant: "warning",
+      });
+    },
+    [currentUserRole, pushToast],
+  );
+
   const startReceivingIncoming = useCallback(
     (incomingId: string) => {
       const receivingAt = new Date().toISOString();
 
       setBatches((current) =>
         current.map((incoming) =>
-          incoming.id === incomingId && incoming.status !== "completed"
+          incoming.id === incomingId && incoming.status === "submitted"
             ? {
                 ...incoming,
                 status: "receiving",
@@ -1284,7 +1326,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
   const completeIncoming = useCallback(
     (incomingId: string) => {
       const incoming = batches.find((entry) => entry.id === incomingId);
-      if (!incoming || incoming.status === "completed") return;
+      if (!incoming || incoming.status !== "receiving") return;
 
       const createdAt = new Date().toISOString();
       const stockDeltas = getBatchReceivedByProduct(incoming);
@@ -1358,10 +1400,12 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
   const deleteIncoming = useCallback(
     (incomingId: string) => {
-      setBatches((current) => current.filter((incoming) => incoming.id !== incomingId));
+      setBatches((current) =>
+        current.filter((incoming) => incoming.id !== incomingId || incoming.status !== "draft"),
+      );
       pushToast({
         title: "Production batch deleted",
-        description: "The production batch was removed.",
+        description: "The draft production batch was removed.",
       });
     },
     [pushToast],
@@ -1399,6 +1443,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       createIncoming,
       updateIncoming,
       submitIncoming,
+      cancelIncomingSubmission,
       startReceivingIncoming,
       completeIncoming,
       deleteIncoming,
@@ -1415,6 +1460,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       createProduct,
       completeIncoming,
       completeProductionPlan,
+      cancelIncomingSubmission,
       deleteIncoming,
       submitIncoming,
       updateIncoming,

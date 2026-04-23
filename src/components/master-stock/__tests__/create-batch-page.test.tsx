@@ -20,8 +20,7 @@ function renderWithProviders(element: React.ReactElement) {
 }
 
 describe("CreateBatchPage", () => {
-  it("creates a production batch from the dedicated create page", async () => {
-    const user = userEvent.setup();
+  beforeEach(() => {
     window.localStorage.clear();
     window.localStorage.setItem(
       "master-stock-state-v2",
@@ -33,6 +32,10 @@ describe("CreateBatchPage", () => {
       }),
     );
     pushMock.mockReset();
+  });
+
+  it("creates a production batch from the dedicated create page", async () => {
+    const user = userEvent.setup();
 
     renderWithProviders(<CreateBatchPage />);
 
@@ -70,5 +73,41 @@ describe("CreateBatchPage", () => {
       expect(createdIncoming?.status).toBe("draft");
       expect(createdIncoming?.items[0]).toMatchObject({ quantity: 12 });
     });
+  });
+
+  it("shows a mobile floating add button on the create batch page", async () => {
+    const user = userEvent.setup();
+
+    renderWithProviders(<CreateBatchPage />);
+
+    await user.click(screen.getByRole("button", { name: /^Add item$/i }));
+
+    const quickSearch = screen.getByPlaceholderText(/Search product or SKU/i);
+    await waitFor(() => expect(quickSearch).toHaveFocus());
+
+    await user.type(quickSearch, "Aquamarine from Brazil");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Aquamarine from Brazil Bracelet \| Gold/i,
+      }),
+    );
+
+    const quantityInput = await screen.findByLabelText(
+      /Quantity for Aquamarine from Brazil Bracelet \| Gold/i,
+    );
+    await waitFor(() => expect(quantityInput).toHaveFocus());
+    await user.clear(quantityInput);
+    await user.type(quantityInput, "18");
+    expect(screen.queryByPlaceholderText(/Search product or SKU/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Add item$/i }));
+    await user.type(screen.getByPlaceholderText(/Search product or SKU/i), "Aquamarine from Brazil");
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Aquamarine from Brazil Bracelet \| Gold/i,
+      }),
+    );
+    expect(screen.getAllByLabelText(/Quantity for Aquamarine from Brazil Bracelet \| Gold/i)).toHaveLength(1);
+    expect(screen.queryByPlaceholderText(/Search product or SKU/i)).not.toBeInTheDocument();
   });
 });

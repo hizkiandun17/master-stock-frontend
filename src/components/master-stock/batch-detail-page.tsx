@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Check, PackagePlus, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, PackagePlus, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ActivityHistory } from "@/components/master-stock/activity-history";
@@ -42,6 +42,17 @@ function getStatusClassName(status: "draft" | "submitted" | "receiving" | "compl
   return "border border-white/10 text-muted-foreground";
 }
 
+function getRoleStatusLabel(
+  status: "draft" | "submitted" | "receiving" | "completed",
+  role: string,
+) {
+  if (role === "production" && status === "receiving") {
+    return "In Review";
+  }
+
+  return getBatchStatusLabel(status);
+}
+
 function getIncomingItemName(item: BatchPlannedItem, products: Product[]) {
   if (item.isCustom) {
     return item.customName?.trim() || "Custom item";
@@ -79,6 +90,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     currentUserRole,
     updateIncoming,
     submitIncoming,
+    cancelIncomingSubmission,
     startReceivingIncoming,
     completeIncoming,
   } = useMasterStock();
@@ -89,11 +101,15 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const [customItemQuantity, setCustomItemQuantity] = useState("0");
   const [customItemNote, setCustomItemNote] = useState("");
   const [mobileSearch, setMobileSearch] = useState("");
+  const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false);
+  const [quickAddSearch, setQuickAddSearch] = useState("");
+  const [isFullPreviewOpen, setIsFullPreviewOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const quantityInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const pendingFocusItemId = useRef<string | null>(null);
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const quickAddSearchInputRef = useRef<HTMLInputElement | null>(null);
   const removeTimeoutRef = useRef<number | null>(null);
 
   const incoming = batches.find((entry) => entry.id === batchId);
@@ -122,6 +138,23 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       return `${product.name} ${product.sku}`.toLowerCase().includes(query);
     });
   }, [mobileSearch, safeProducts]);
+  const filteredQuickAddProducts = useMemo(() => {
+    const query = quickAddSearch.trim().toLowerCase();
+
+    if (!query) {
+      return safeProducts.filter((product) => !product.archived).slice(0, 8);
+    }
+
+    return safeProducts
+      .filter((product) => {
+        if (product.archived) {
+          return false;
+        }
+
+        return `${product.name} ${product.sku}`.toLowerCase().includes(query);
+      })
+      .slice(0, 10);
+  }, [quickAddSearch, safeProducts]);
 
   useEffect(() => {
     if (typeof window.matchMedia !== "function") {
@@ -181,6 +214,18 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
 
     return () => window.cancelAnimationFrame(frame);
   }, [incoming?.status, incomingItems.length]);
+
+  useEffect(() => {
+    if (!isMobileQuickAddOpen) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      quickAddSearchInputRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMobileQuickAddOpen]);
 
   useEffect(() => {
     return () => {
@@ -259,6 +304,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     );
     if (existingItem) {
       pendingFocusItemId.current = existingItem.id;
+      focusIncomingInput(existingItem.id);
       setMobileSearch("");
       return;
     }
@@ -272,6 +318,11 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     replaceItems([...incomingItems, nextItem]);
     pendingFocusItemId.current = nextItem.id;
     setMobileSearch("");
+  }
+
+  function addProductFromQuickSheet(productId: string) {
+    addProduct(productId);
+    setQuickAddSearch("");
   }
 
   function addCustomItem() {
@@ -460,7 +511,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                     {getProductionBatchName(activeIncoming.name, activeIncoming.source)}
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    {getBatchStatusLabel(activeIncoming.status)} • {itemCount} item
+                    {getRoleStatusLabel(activeIncoming.status, currentUserRole)} • {itemCount} item
                     {itemCount === 1 ? "" : "s"} • {totalQuantity} pcs
                   </p>
                 </div>
@@ -470,7 +521,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                     getStatusClassName(activeIncoming.status),
                   )}
                 >
-                  {getBatchStatusLabel(activeIncoming.status)}
+                  {getRoleStatusLabel(activeIncoming.status, currentUserRole)}
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">{currentStageLabel}</p>
@@ -496,6 +547,16 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
               </label>
             </CardContent>
           </Card>
+
+          {isEditableDraft && isDesktop ? (
+            <Button
+              onClick={() => submitIncoming(activeIncoming.id)}
+              className="min-h-12 w-full sm:w-auto"
+              disabled={incomingItems.length === 0}
+            >
+              Submit Batch
+            </Button>
+          ) : null}
 
           {isEditableDraft ? (
             <>
@@ -742,9 +803,19 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
             <Card className="border-white/10">
               <CardContent className="space-y-4 p-4 md:p-5">
                 <div className="space-y-1">
-                  <h2 className="text-lg font-semibold text-foreground">Submitted summary</h2>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {activeIncoming.status === "submitted"
+                      ? "Submitted summary"
+                      : activeIncoming.status === "receiving"
+                        ? "In review"
+                        : "Completed summary"}
+                  </h2>
                   <p className="text-sm text-muted-foreground">
-                    This batch has already been submitted and is waiting for internal receiving.
+                    {activeIncoming.status === "submitted"
+                      ? "This batch is locked and waiting for internal receiving."
+                      : activeIncoming.status === "receiving"
+                        ? "The internal team is reviewing this submission. No actions are available."
+                        : "This batch is completed and read-only."}
                   </p>
                 </div>
                 <div className="space-y-3">
@@ -773,10 +844,115 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                     </div>
                   ))}
                 </div>
+
+                {activeIncoming.status === "submitted" ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => cancelIncomingSubmission(activeIncoming.id)}
+                    className="min-h-12 w-full sm:w-auto"
+                  >
+                    Cancel Submission
+                  </Button>
+                ) : null}
               </CardContent>
             </Card>
           )}
         </section>
+
+        {isEditableDraft ? (
+          <>
+            <Button
+              type="button"
+              aria-label="Add item"
+              onClick={() => setIsMobileQuickAddOpen(true)}
+              className="pointer-events-auto fixed bottom-[96px] right-5 z-[9999] h-16 w-16 rounded-full border border-white/20 bg-white p-0 text-black shadow-[0_18px_55px_rgba(0,0,0,0.65)] hover:bg-white active:scale-95 md:hidden"
+            >
+              <Plus className="h-7 w-7" />
+            </Button>
+
+            {isMobileQuickAddOpen ? (
+              <div className="pointer-events-auto fixed inset-x-4 bottom-[92px] z-[10000] rounded-[24px] border border-white/10 bg-[#09090b] p-4 shadow-[0_24px_90px_rgba(0,0,0,0.58)] md:hidden">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-foreground">Add item</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Search, tap, then fill quantity in the list.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsMobileQuickAddOpen(false);
+                      setQuickAddSearch("");
+                    }}
+                    className="min-h-10 px-3"
+                  >
+                    Done
+                  </Button>
+                </div>
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    ref={quickAddSearchInputRef}
+                    value={quickAddSearch}
+                    onChange={(event) => setQuickAddSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") {
+                        return;
+                      }
+
+                      const firstMatch = filteredQuickAddProducts[0];
+                      if (!firstMatch) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      addProductFromQuickSheet(firstMatch.id);
+                    }}
+                    placeholder="Search product or SKU..."
+                    className="h-14 pl-11 text-base"
+                  />
+                </div>
+
+                <div className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                  {filteredQuickAddProducts.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-muted-foreground">
+                      No items match this search.
+                    </div>
+                  ) : (
+                    filteredQuickAddProducts.map((product) => {
+                      const categoryName = getCategoryName(product.categoryId, safeCategories);
+                      const isAdded = selectedProductIds.has(product.id);
+
+                      return (
+                        <button
+                          key={product.id}
+                          type="button"
+                          onClick={() => addProductFromQuickSheet(product.id)}
+                          className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 py-3 text-left transition-colors active:bg-white/[0.04]"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">
+                              {product.name}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {product.sku} • {categoryName}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-sm text-muted-foreground">
+                            {isAdded ? "Focus" : "Add"}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : null}
 
         {isEditableDraft ? (
           <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
@@ -795,13 +971,25 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
             </div>
           </div>
         ) : null}
+
+        {activeIncoming.status === "submitted" ? (
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+            <Button
+              variant="outline"
+              onClick={() => cancelIncomingSubmission(activeIncoming.id)}
+              className="min-h-12 w-full"
+            >
+              Cancel Submission
+            </Button>
+          </div>
+        ) : null}
       </MasterStockShell>
     );
   }
 
   return (
     <MasterStockShell currentPath="production-batch">
-      <section className="space-y-8 pb-24 md:pb-0">
+      <section className="space-y-5 pb-24 md:space-y-8 md:pb-0">
         <div className="space-y-3">
           <Link
             href="/master-stock/incoming"
@@ -837,17 +1025,13 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 </Button>
               ) : null}
 
-              {(activeIncoming.status === "draft" || activeIncoming.status === "submitted") ? (
+              {activeIncoming.status === "submitted" ? (
                 <Button
-                  onClick={() =>
-                    activeIncoming.status === "draft"
-                      ? submitIncoming(activeIncoming.id)
-                      : startReceivingIncoming(activeIncoming.id)
-                  }
+                  onClick={() => startReceivingIncoming(activeIncoming.id)}
                   className="min-h-11 w-full sm:w-auto"
                 >
                   <ShieldCheck className="mr-2 h-4 w-4" />
-                  {activeIncoming.status === "draft" ? "Submit Batch" : "Receive"}
+                  Receive
                 </Button>
               ) : null}
 
@@ -884,15 +1068,56 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
 
         {!isReceiving && !isCompleted ? (
           <Card className="border-white/10">
-            <CardContent className="space-y-5 p-4 md:p-5">
-              <div className="space-y-2">
+            <CardContent className="space-y-4 p-4 md:space-y-5 md:p-5">
+              <div className="space-y-1.5 md:space-y-2">
                 <h2 className="text-lg font-semibold text-foreground">Submission summary</h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm leading-5 text-muted-foreground">
                   Review the saved craftsman report first, then click Receive to begin checklist verification.
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="space-y-3 md:hidden">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-2xl border border-white/10 px-3 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Source</p>
+                    <p className="mt-1.5 truncate text-sm font-semibold text-foreground">{sourceLabel}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 px-3 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Items</p>
+                    <p className="mt-1.5 text-sm font-semibold text-foreground">{incomingItems.length}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white/10 px-3 py-3">
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Qty</p>
+                    <p className="mt-1.5 text-sm font-semibold text-foreground">{totals.total} pcs</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3 py-1.5">
+                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Created</span>
+                    <span className="text-sm text-foreground">{formatDate(activeIncoming.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 py-1.5">
+                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Submitted</span>
+                    <span className="text-right text-sm text-foreground">
+                      {activeIncoming.submittedAt ? formatDateTime(activeIncoming.submittedAt) : "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-white/10 py-1.5">
+                    <span className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Status</span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.18em]",
+                        getStatusClassName(activeIncoming.status),
+                      )}
+                    >
+                      {getBatchStatusLabel(activeIncoming.status)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hidden gap-3 md:grid md:grid-cols-2 xl:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 px-4 py-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Source</p>
                   <p className="mt-2 text-lg font-semibold text-foreground">{sourceLabel}</p>
@@ -929,6 +1154,25 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
               </div>
             </CardContent>
           </Card>
+        ) : null}
+
+        {!isReceiving && !isCompleted ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsFullPreviewOpen(true)}
+            className="min-h-12 w-full justify-between rounded-2xl px-4 text-left transition-all hover:border-white/20 hover:bg-white/[0.03] active:scale-[0.99]"
+          >
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">
+                Preview {incomingItems.length} Item{incomingItems.length === 1 ? "" : "s"}
+              </span>
+              <span className="block text-xs font-normal text-muted-foreground">
+                Tap to review submitted quantities
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </Button>
         ) : null}
 
         {isReceiving ? (
@@ -1081,6 +1325,32 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       </section>
 
       <Dialog
+        open={isFullPreviewOpen}
+        onOpenChange={setIsFullPreviewOpen}
+        title="Submitted Items"
+        description={`${incomingItems.length} item${incomingItems.length === 1 ? "" : "s"} • ${totals.total} pcs`}
+        className="h-auto max-h-[78vh] rounded-t-[28px] border-t border-white/10 bg-[#09090b] md:max-h-[82vh] md:max-w-xl md:rounded-[24px] md:border"
+        headerClassName="border-b border-white/10 px-4 py-4 md:px-6"
+        bodyClassName="max-h-[58vh] space-y-1 overflow-y-auto px-4 py-3 md:max-h-[60vh] md:px-6"
+      >
+        {incomingItems.length === 0 ? (
+          <p className="py-4 text-sm text-muted-foreground">No submitted items yet.</p>
+        ) : (
+          incomingItems.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-4 border-b border-white/10 py-3 last:border-b-0"
+            >
+              <p className="min-w-0 truncate text-sm text-foreground">
+                {getIncomingItemName(item, safeProducts)}
+              </p>
+              <p className="shrink-0 text-sm font-medium text-foreground">{item.quantity} pcs</p>
+            </div>
+          ))
+        )}
+      </Dialog>
+
+      <Dialog
         open={isCompleteDialogOpen}
         onOpenChange={setIsCompleteDialogOpen}
         title="Update stock and complete?"
@@ -1117,16 +1387,12 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       </Dialog>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
-        {(activeIncoming.status === "draft" || activeIncoming.status === "submitted") ? (
+        {activeIncoming.status === "submitted" ? (
           <Button
-            onClick={() =>
-              activeIncoming.status === "draft"
-                ? submitIncoming(activeIncoming.id)
-                : startReceivingIncoming(activeIncoming.id)
-            }
+            onClick={() => startReceivingIncoming(activeIncoming.id)}
             className="min-h-12 w-full"
           >
-            {activeIncoming.status === "draft" ? "Submit Batch" : "Receive"}
+            Receive
           </Button>
         ) : null}
 

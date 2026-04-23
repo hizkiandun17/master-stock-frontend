@@ -28,11 +28,14 @@ export function CreateBatchPage() {
   const [items, setItems] = useState<BatchPlannedItem[]>([]);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [mobileSearch, setMobileSearch] = useState("");
+  const [isMobileQuickAddOpen, setIsMobileQuickAddOpen] = useState(false);
+  const [quickAddSearch, setQuickAddSearch] = useState("");
   const [isDesktop, setIsDesktop] = useState(false);
   const pendingFocusProductId = useRef<string | null>(null);
   const plannedInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const addItemButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const quickAddSearchInputRef = useRef<HTMLInputElement | null>(null);
   const removeTimeoutRef = useRef<number | null>(null);
 
   const selectedProductIds = useMemo(
@@ -55,6 +58,24 @@ export function CreateBatchPage() {
       return `${product.name} ${product.sku}`.toLowerCase().includes(query);
     });
   }, [mobileSearch, products]);
+
+  const filteredQuickAddProducts = useMemo(() => {
+    const query = quickAddSearch.trim().toLowerCase();
+
+    if (!query) {
+      return products.filter((product) => !product.archived).slice(0, 8);
+    }
+
+    return products
+      .filter((product) => {
+        if (product.archived) {
+          return false;
+        }
+
+        return `${product.name} ${product.sku}`.toLowerCase().includes(query);
+      })
+      .slice(0, 10);
+  }, [quickAddSearch, products]);
 
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -96,6 +117,18 @@ export function CreateBatchPage() {
   }, [items.length]);
 
   useEffect(() => {
+    if (!isMobileQuickAddOpen) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      quickAddSearchInputRef.current?.focus();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isMobileQuickAddOpen]);
+
+  useEffect(() => {
     return () => {
       if (removeTimeoutRef.current) {
         window.clearTimeout(removeTimeoutRef.current);
@@ -111,7 +144,7 @@ export function CreateBatchPage() {
 
     window.requestAnimationFrame(() => {
       if (typeof input.scrollIntoView === "function") {
-        input.scrollIntoView({ block: "center", behavior: "smooth" });
+        input.scrollIntoView({ block: "start", behavior: "smooth" });
       }
       input.focus({ preventScroll: true });
       input.select();
@@ -122,6 +155,7 @@ export function CreateBatchPage() {
     const existingItem = items.find((item) => item.productId === productId);
     if (existingItem) {
       pendingFocusProductId.current = productId;
+      focusProductInput(productId);
       setMobileSearch("");
       return;
     }
@@ -136,6 +170,12 @@ export function CreateBatchPage() {
     ]);
     pendingFocusProductId.current = productId;
     setMobileSearch("");
+  }
+
+  function addProductFromQuickSheet(productId: string) {
+    addProduct(productId);
+    setQuickAddSearch("");
+    setIsMobileQuickAddOpen(false);
   }
 
   function updateItem(productId: string, patch: Partial<BatchPlannedItem>) {
@@ -377,9 +417,9 @@ export function CreateBatchPage() {
                               if (pendingFocusProductId.current === item.productId && node) {
                                 window.requestAnimationFrame(() => {
                                   if (typeof node.scrollIntoView === "function") {
-                                    node.scrollIntoView({ block: "center", behavior: "smooth" });
+                                    node.scrollIntoView({ block: "start", behavior: "smooth" });
                                   }
-                                  node.focus();
+                                  node.focus({ preventScroll: true });
                                   node.select();
                                   pendingFocusProductId.current = null;
                                 });
@@ -507,6 +547,97 @@ export function CreateBatchPage() {
         </div>
         ) : null}
       </section>
+
+      <Button
+        type="button"
+        aria-label="Add item"
+        onClick={() => setIsMobileQuickAddOpen(true)}
+        className="pointer-events-auto fixed bottom-[96px] right-5 z-[9999] h-16 w-16 rounded-full border border-white/20 bg-white p-0 text-black shadow-[0_18px_55px_rgba(0,0,0,0.65)] hover:bg-white active:scale-95 md:hidden"
+      >
+        <Plus className="h-7 w-7" />
+      </Button>
+
+      {isMobileQuickAddOpen ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[92px] z-[10000] px-4 md:hidden">
+          <div className="pointer-events-auto rounded-[24px] border border-white/10 bg-[#09090b] p-4 shadow-[0_24px_90px_rgba(0,0,0,0.58)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Add item</h2>
+                <p className="text-xs text-muted-foreground">
+                  Search, tap, then fill quantity in the list.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsMobileQuickAddOpen(false);
+                  setQuickAddSearch("");
+                }}
+                className="min-h-10 px-3"
+              >
+                Done
+              </Button>
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={quickAddSearchInputRef}
+                value={quickAddSearch}
+                onChange={(event) => setQuickAddSearch(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter") {
+                    return;
+                  }
+
+                  const firstMatch = filteredQuickAddProducts[0];
+                  if (!firstMatch) {
+                    return;
+                  }
+
+                  event.preventDefault();
+                  addProductFromQuickSheet(firstMatch.id);
+                }}
+                placeholder="Search product or SKU..."
+                className="h-14 pl-11 text-base"
+              />
+            </div>
+
+            <div className="mt-3 max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+              {filteredQuickAddProducts.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-muted-foreground">
+                  No items match this search.
+                </div>
+              ) : (
+                filteredQuickAddProducts.map((product) => {
+                  const categoryName = getCategoryName(product.categoryId, categories);
+                  const isAdded = selectedProductIds.has(product.id);
+
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      onClick={() => addProductFromQuickSheet(product.id)}
+                      className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 py-3 text-left transition-colors active:bg-white/[0.04]"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{product.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {getProductSubtitle(product, categoryName)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-sm text-muted-foreground">
+                        {isAdded ? "Focus" : "Add"}
+                      </span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex items-center justify-between gap-4">

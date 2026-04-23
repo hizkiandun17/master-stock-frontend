@@ -33,6 +33,14 @@ function getStatusClassName(status: ProductionBatch["status"]) {
   return "border border-white/10 text-muted-foreground";
 }
 
+function getRoleStatusLabel(status: ProductionBatch["status"], role: string) {
+  if (role === "production" && status === "receiving") {
+    return "In Review";
+  }
+
+  return getBatchStatusLabel(status);
+}
+
 export function BatchesPage() {
   const router = useRouter();
   const { batches, deleteIncoming, currentUserRole } = useMasterStock();
@@ -41,12 +49,13 @@ export function BatchesPage() {
   const sortedBatches = useMemo(
     () =>
       batches
+        .filter((batch) => currentUserRole === "production" || batch.status !== "draft")
         .slice()
         .sort(
           (left, right) =>
             new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime(),
         ),
-    [batches],
+    [batches, currentUserRole],
   );
 
   function confirmDelete() {
@@ -68,13 +77,15 @@ export function BatchesPage() {
             </p>
           </div>
 
-          <Button
-            onClick={() => router.push("/master-stock/incoming/new")}
-            className="min-h-12 w-full sm:w-auto"
-          >
-            <FilePlus2 className="mr-2 h-4 w-4" />
-            {currentUserRole === "production" ? "New Batch" : "Create Production Batch"}
-          </Button>
+          {currentUserRole === "production" ? (
+            <Button
+              onClick={() => router.push("/master-stock/incoming/new")}
+              className="min-h-12 w-full sm:w-auto"
+            >
+              <FilePlus2 className="mr-2 h-4 w-4" />
+              New Batch
+            </Button>
+          ) : null}
         </div>
 
         {sortedBatches.length === 0 ? (
@@ -129,7 +140,7 @@ export function BatchesPage() {
                               getStatusClassName(batch.status),
                             )}
                           >
-                            {getBatchStatusLabel(batch.status)}
+                            {getRoleStatusLabel(batch.status, currentUserRole)}
                           </span>
                           {batch.status === "draft" ? (
                             <button
