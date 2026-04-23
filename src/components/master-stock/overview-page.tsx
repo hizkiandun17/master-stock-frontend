@@ -963,18 +963,25 @@ export function OverviewPage() {
                         }
                       }}
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1 space-y-1">
-                          <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">
-                            {product.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{product.sku}</p>
+                      <div className="flex min-h-[56px] items-center justify-between gap-4">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-xs font-semibold text-black">
+                            {product.imageHint}
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                            <p className="line-clamp-2 text-sm font-medium leading-[1.25] text-foreground">
+                              {product.name}
+                            </p>
+                            <p className="text-xs leading-none text-muted-foreground">
+                              {product.sku}
+                            </p>
+                          </div>
                         </div>
-                        <div className="shrink-0 text-right">
+                        <div className="flex min-w-[52px] shrink-0 flex-col items-end justify-center text-right">
                           <p className="text-lg font-semibold leading-none tracking-tight text-foreground">
                             {getProductTotal(product)}
                           </p>
-                          <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                          <p className="mt-1.5 text-[11px] uppercase leading-none tracking-[0.14em] text-muted-foreground">
                             Total
                           </p>
                         </div>
