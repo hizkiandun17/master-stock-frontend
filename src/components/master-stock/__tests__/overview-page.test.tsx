@@ -118,6 +118,21 @@ describe("OverviewPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows stock condition styling inside the product detail modal", async () => {
+    const user = userEvent.setup();
+    renderOverview();
+
+    await user.type(screen.getByPlaceholderText(/Search by name or SKU/i), "Adventurous");
+    await user.click(screen.getByText(/Adventurous Bracelet \| Gold/i));
+    expect(screen.getAllByText(/Low Stock/i).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /Close dialog/i }));
+
+    await user.clear(screen.getByPlaceholderText(/Search by name or SKU/i));
+    await user.type(screen.getByPlaceholderText(/Search by name or SKU/i), "Accepting Choker");
+    await user.click(screen.getByText(/Accepting Choker \| Silver/i));
+    expect(screen.getAllByText(/Out of Stock/i).length).toBeGreaterThan(0);
+  });
+
   it("opens the row action dropdown and uses view details from the menu", async () => {
     const user = userEvent.setup();
     renderOverview();

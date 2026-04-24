@@ -27,12 +27,13 @@ export function ProductionPlansPage() {
   const sortedPlans = useMemo(
     () =>
       productionPlans
+        .filter((plan) => currentUserRole !== "production" || plan.status === "completed")
         .slice()
         .sort(
           (left, right) =>
             new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
         ),
-    [productionPlans],
+    [currentUserRole, productionPlans],
   );
 
   function confirmDelete() {
@@ -43,39 +44,37 @@ export function ProductionPlansPage() {
 
   return (
     <MasterStockShell currentPath="dispatch">
-      {currentUserRole === "production" ? (
-        <section className="space-y-4">
-          <Card className="border-white/10">
-            <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Batches are internal-only</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Craftsman users work in Production Batch. Dispatch stays with the internal team only.
-              </p>
-            </CardContent>
-          </Card>
-        </section>
-      ) : (
       <section className="space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">Dispatch</h1>
             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-              What production sends out, with owner visibility and export-ready outgoing records.
+              {currentUserRole === "production"
+                ? "What the internal team has sent out for craftsman handling."
+                : "What production sends out, with owner visibility and export-ready outgoing records."}
             </p>
           </div>
 
-          <Button onClick={() => setIsCreateOpen(true)} className="min-h-12 w-full sm:w-auto">
-            <FilePlus2 className="mr-2 h-4 w-4" />
-            Create Dispatch
-          </Button>
+          {currentUserRole === "production" ? null : (
+            <Button onClick={() => setIsCreateOpen(true)} className="min-h-12 w-full sm:w-auto">
+              <FilePlus2 className="mr-2 h-4 w-4" />
+              Create Dispatch
+            </Button>
+          )}
         </div>
 
         {sortedPlans.length === 0 ? (
           <Card className="border-white/10">
             <CardContent className="px-5 py-12 text-center">
-              <h2 className="text-lg font-semibold text-foreground">No dispatch records yet</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                {currentUserRole === "production"
+                  ? "No dispatch records have been shared yet"
+                  : "No dispatch records yet"}
+              </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create a dispatch record to prepare what production is sending out next.
+                {currentUserRole === "production"
+                  ? "Completed dispatches from the internal team will appear here."
+                  : "Create a dispatch record to prepare what production is sending out next."}
               </p>
             </CardContent>
           </Card>
@@ -118,17 +117,19 @@ export function ProductionPlansPage() {
                           >
                             {titleCase(plan.status)}
                           </span>
-                        <button
-                          type="button"
-                          aria-label={`Delete ${plan.name}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPlanToDelete(plan.id);
-                          }}
-                          className="rounded-full p-2.5 text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                          {currentUserRole === "production" ? null : (
+                            <button
+                              type="button"
+                              aria-label={`Delete ${plan.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setPlanToDelete(plan.id);
+                              }}
+                              className="rounded-full p-2.5 text-muted-foreground opacity-100 transition hover:bg-accent hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -147,7 +148,6 @@ export function ProductionPlansPage() {
           </div>
         )}
       </section>
-      )}
 
       <CreateProductionPlanDialog
         open={isCreateOpen}

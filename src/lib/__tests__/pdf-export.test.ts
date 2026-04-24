@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMasterStockPdfModel } from "@/lib/pdf-export";
-import type { Category, Product, ProductionPlan } from "@/lib/types";
+import { buildMasterStockPdfModel, buildTemporaryProductionBatchPdfModel } from "@/lib/pdf-export";
+import type { Category, Product, ProductionBatch, ProductionPlan } from "@/lib/types";
 
 const categories: Category[] = [
   {
@@ -68,6 +68,25 @@ const productionPlans: ProductionPlan[] = [
   },
 ];
 
+const submittedBatch: ProductionBatch = {
+  id: "incoming-1",
+  name: "Kiriman Indira",
+  source: "indira",
+  status: "submitted",
+  createdAt: "2026-04-24T00:00:00.000Z",
+  updatedAt: "2026-04-24T00:00:00.000Z",
+  createdBy: "production",
+  submittedAt: "2026-04-24T01:00:00.000Z",
+  items: [
+    {
+      id: "incoming-item-1",
+      productId: "prd-1",
+      quantity: 14,
+    },
+  ],
+  history: [],
+};
+
 describe("buildMasterStockPdfModel", () => {
   it("replaces the selected source column with production-plan quantities", () => {
     const model = buildMasterStockPdfModel({
@@ -109,6 +128,25 @@ describe("buildMasterStockPdfModel", () => {
       updatedSource: false,
       updatedTotal: false,
       lowStock: true,
+    });
+  });
+
+  it("maps submitted production batch quantities into the selected source column", () => {
+    const model = buildTemporaryProductionBatchPdfModel({
+      batch: submittedBatch,
+      products,
+      categories,
+    });
+
+    expect(model.mode).toBe("production-plan");
+    expect(model.source).toBe("indira");
+    expect(model.sections[0]?.rows[0]).toMatchObject({
+      indira: "14",
+      mita: "0",
+      inStock: "20",
+      total: "34",
+      updatedSource: true,
+      updatedTotal: true,
     });
   });
 });

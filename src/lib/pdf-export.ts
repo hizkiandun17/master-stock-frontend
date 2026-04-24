@@ -76,6 +76,161 @@ function getActualTotal(product: Product) {
   );
 }
 
+function getDefaultMasterStockFileName(model: MasterStockPdfModel) {
+  return model.mode === "production-plan"
+    ? `OSHE_Samapura-Production-Stock_${model.generatedOn}.pdf`
+    : model.mode === "dispatch-batch"
+      ? `OSHE_Samapura-Dispatch-Batch_${model.generatedOn}.pdf`
+      : `OSHE_Samapura-Stock-Master_${model.generatedOn}.pdf`;
+}
+
+async function renderMasterStockPdfDocument({
+  model,
+  fileName,
+  title = "SAMAPURA JEWELRY",
+  subtitle = "STOCK MASTER LIST",
+  metaLines,
+}: {
+  model: MasterStockPdfModel;
+  fileName?: string;
+  title?: string;
+  subtitle?: string;
+  metaLines?: string[];
+}) {
+  const { jsPDF } = await import("jspdf");
+  const autoTable = (await import("jspdf-autotable")).default;
+
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "pt",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 56;
+  let cursorY = 72;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(28);
+  doc.setTextColor(39, 39, 42);
+  doc.text(title, marginX, cursorY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(15);
+  doc.setTextColor(82, 82, 91);
+  doc.text(subtitle, marginX, cursorY + 24);
+
+  doc.setFontSize(10.5);
+  doc.setTextColor(63, 63, 70);
+  const headerLines =
+    metaLines ??
+    [
+      `Generated On: ${model.generatedOn}`,
+      `Total SKUs: ${formatNumber(model.totalSkus)}`,
+      `Total Stock: ${formatNumber(model.totalStock)} pcs`,
+      ...(model.mode !== "actual" && model.source
+        ? [
+            model.mode === "dispatch-batch" ? "Mode: Dispatch Batch" : "Mode: Production Plan",
+            `Source: ${titleCase(model.source)}`,
+          ]
+        : []),
+    ];
+
+  headerLines.forEach((line, index) => {
+    doc.text(line, pageWidth - marginX, cursorY + index * 16, { align: "right" });
+  });
+
+  cursorY += headerLines.length > 3 ? 92 : 76;
+
+  const sourceColumn = model.source as PdfColumnKey | undefined;
+
+  for (const section of model.sections) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(12.5);
+    doc.setTextColor(39, 39, 42);
+    doc.text(
+      `${section.title} (${formatNumber(section.total)} pcs)`,
+      marginX,
+      cursorY,
+    );
+
+    autoTable(doc, {
+      startY: cursorY + 14,
+      margin: { left: marginX, right: marginX },
+      tableWidth: pageWidth - marginX * 2,
+      theme: "grid",
+      head: [["No.", "Product", "In Stock", "Indira", "Mita", "Total"]],
+      body: section.rows,
+      columns: [
+        { header: "No.", dataKey: "no" },
+        { header: "Product", dataKey: "product" },
+        { header: "In Stock", dataKey: "inStock" },
+        { header: "Indira", dataKey: "indira" },
+        { header: "Mita", dataKey: "mita" },
+        { header: "Total", dataKey: "total" },
+      ],
+      styles: {
+        font: "helvetica",
+        fontSize: 10,
+        cellPadding: { top: 10, right: 10, bottom: 10, left: 10 },
+        lineColor: [228, 228, 231],
+        lineWidth: 0.8,
+        textColor: [24, 24, 27],
+        valign: "middle",
+      },
+      headStyles: {
+        fillColor: [248, 250, 252],
+        textColor: [82, 82, 91],
+        fontStyle: "bold",
+      },
+      columnStyles: {
+        no: { cellWidth: 32, halign: "center" },
+        product: { cellWidth: 240 },
+        inStock: { cellWidth: 70, halign: "left" },
+        indira: { cellWidth: 64, halign: "left" },
+        mita: { cellWidth: 64, halign: "left" },
+        total: { cellWidth: 64, halign: "left", fontStyle: "bold" },
+      },
+      didParseCell: (hookData) => {
+        if (hookData.section !== "body") {
+          return;
+        }
+
+        const row = hookData.row.raw as PdfRow;
+        const key = hookData.column.dataKey as PdfColumnKey;
+
+        if (row.lowStock) {
+          hookData.cell.styles.fillColor = [254, 249, 195];
+        }
+
+        const isUpdatedSourceCell =
+          sourceColumn !== undefined && row.updatedSource && key === sourceColumn;
+        const isUpdatedTotalCell = row.updatedTotal && key === "total";
+
+        if (isUpdatedSourceCell || isUpdatedTotalCell) {
+          hookData.cell.styles.fillColor = [230, 240, 255];
+          hookData.cell.styles.textColor = [29, 78, 216];
+          hookData.cell.styles.fontStyle = "bold";
+        }
+      },
+    });
+
+    const docWithTable = doc as typeof doc & { lastAutoTable?: { finalY?: number } };
+    cursorY = docWithTable.lastAutoTable?.finalY
+      ? (docWithTable.lastAutoTable.finalY ?? cursorY) + 28
+      : cursorY + 120;
+  }
+
+  if (model.sections.length === 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor(82, 82, 91);
+    doc.text("No products available in the current view.", marginX, cursorY);
+  }
+
+  doc.save(fileName ?? getDefaultMasterStockFileName(model));
+}
+
 function getPlanQuantitiesBySource(
   productionPlans: ProductionPlan[],
   source: ProductionPlanSource,
@@ -182,143 +337,11 @@ export function buildMasterStockPdfModel({
 }
 
 export async function exportMasterStockPdf(options: ExportMasterStockPdfOptions) {
-  const { jsPDF } = await import("jspdf");
-  const autoTable = (await import("jspdf-autotable")).default;
-
   const model = buildMasterStockPdfModel(options);
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "pt",
-    format: "a4",
+  return renderMasterStockPdfDocument({
+    model,
+    fileName: options.fileName,
   });
-
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const marginX = 56;
-  let cursorY = 72;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(28);
-  doc.setTextColor(39, 39, 42);
-  doc.text("SAMAPURA JEWELRY", marginX, cursorY);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(15);
-  doc.setTextColor(82, 82, 91);
-  doc.text("STOCK MASTER LIST", marginX, cursorY + 24);
-
-  doc.setFontSize(10.5);
-  doc.setTextColor(63, 63, 70);
-  const headerLines = [
-    `Generated On: ${model.generatedOn}`,
-    `Total SKUs: ${formatNumber(model.totalSkus)}`,
-    `Total Stock: ${formatNumber(model.totalStock)} pcs`,
-  ];
-
-  if (model.mode !== "actual" && model.source) {
-    headerLines.push(model.mode === "dispatch-batch" ? "Mode: Dispatch Batch" : "Mode: Production Plan");
-    headerLines.push(`Source: ${titleCase(model.source)}`);
-  }
-
-  headerLines.forEach((line, index) => {
-    doc.text(line, pageWidth - marginX, cursorY + index * 16, { align: "right" });
-  });
-
-  cursorY += model.mode !== "actual" ? 92 : 76;
-
-  const sourceColumn = model.source as PdfColumnKey | undefined;
-
-  for (const section of model.sections) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12.5);
-    doc.setTextColor(39, 39, 42);
-    doc.text(
-      `${section.title} (${formatNumber(section.total)} pcs)`,
-      marginX,
-      cursorY,
-    );
-
-    autoTable(doc, {
-      startY: cursorY + 14,
-      margin: { left: marginX, right: marginX },
-      tableWidth: pageWidth - marginX * 2,
-      theme: "grid",
-      head: [["No.", "Product", "In Stock", "Indira", "Mita", "Total"]],
-      body: section.rows,
-      columns: [
-        { header: "No.", dataKey: "no" },
-        { header: "Product", dataKey: "product" },
-        { header: "In Stock", dataKey: "inStock" },
-        { header: "Indira", dataKey: "indira" },
-        { header: "Mita", dataKey: "mita" },
-        { header: "Total", dataKey: "total" },
-      ],
-      styles: {
-        font: "helvetica",
-        fontSize: 10,
-        cellPadding: { top: 10, right: 10, bottom: 10, left: 10 },
-        lineColor: [228, 228, 231],
-        lineWidth: 0.8,
-        textColor: [24, 24, 27],
-        valign: "middle",
-      },
-      headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [82, 82, 91],
-        fontStyle: "bold",
-      },
-      columnStyles: {
-        no: { cellWidth: 32, halign: "center" },
-        product: { cellWidth: 240 },
-        inStock: { cellWidth: 70, halign: "left" },
-        indira: { cellWidth: 64, halign: "left" },
-        mita: { cellWidth: 64, halign: "left" },
-        total: { cellWidth: 64, halign: "left", fontStyle: "bold" },
-      },
-      didParseCell: (hookData) => {
-        if (hookData.section !== "body") {
-          return;
-        }
-
-        const row = hookData.row.raw as PdfRow;
-        const key = hookData.column.dataKey as PdfColumnKey;
-
-        if (row.lowStock) {
-          hookData.cell.styles.fillColor = [254, 249, 195];
-        }
-
-        const isUpdatedSourceCell =
-          sourceColumn !== undefined && row.updatedSource && key === sourceColumn;
-        const isUpdatedTotalCell = row.updatedTotal && key === "total";
-
-        if (isUpdatedSourceCell || isUpdatedTotalCell) {
-          hookData.cell.styles.fillColor = [230, 240, 255];
-          hookData.cell.styles.textColor = [29, 78, 216];
-          hookData.cell.styles.fontStyle = "bold";
-        }
-      },
-    });
-
-    const docWithTable = doc as typeof doc & { lastAutoTable?: { finalY?: number } };
-    cursorY = docWithTable.lastAutoTable?.finalY
-      ? (docWithTable.lastAutoTable.finalY ?? cursorY) + 28
-      : cursorY + 120;
-  }
-
-  if (model.sections.length === 0) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.setTextColor(82, 82, 91);
-    doc.text("No products available in the current view.", marginX, cursorY);
-  }
-
-  const defaultFileName =
-    model.mode === "production-plan"
-      ? `OSHE_Samapura-Production-Stock_${model.generatedOn}.pdf`
-      : model.mode === "dispatch-batch"
-        ? `OSHE_Samapura-Dispatch-Batch_${model.generatedOn}.pdf`
-      : `OSHE_Samapura-Stock-Master_${model.generatedOn}.pdf`;
-
-  doc.save(options.fileName ?? defaultFileName);
 }
 
 export async function exportSingleProductionPlanPdf({
@@ -356,6 +379,45 @@ function getBatchItemName(batch: ProductionBatch, productId: string | undefined,
   return products.find((product) => product.id === productId)?.name ?? productId;
 }
 
+export function buildTemporaryProductionBatchPdfModel({
+  batch,
+  products,
+  categories,
+}: {
+  batch: ProductionBatch;
+  products: Product[];
+  categories: Category[];
+}) {
+  const submittedProductIds = new Set(
+    batch.items.flatMap((item) => (item.productId ? [item.productId] : [])),
+  );
+  const matchedItems = batch.items
+    .filter((item) => item.productId && !item.isCustom)
+    .map((item) => ({
+      productId: item.productId as string,
+      plannedQty: item.quantity,
+      quantity: item.quantity,
+    }));
+
+  return buildMasterStockPdfModel({
+    products: products.filter((product) => submittedProductIds.has(product.id)),
+    categories,
+    mode: "production-plan",
+    source: batch.source as ProductionPlanSource,
+    productionPlans: [
+      {
+        id: `${batch.id}-temporary-export`,
+        name: batch.name?.trim() || `${titleCase(batch.source)} Production Batch`,
+        source: batch.source as ProductionPlanSource,
+        items: matchedItems,
+        createdAt: batch.submittedAt ?? batch.createdAt,
+        status: "draft",
+        history: [],
+      },
+    ],
+  });
+}
+
 export async function exportProductionBatchPdf({
   batch,
   products,
@@ -363,6 +425,35 @@ export async function exportProductionBatchPdf({
   reportType,
   fileName,
 }: ExportProductionBatchPdfOptions) {
+  if (reportType === "temporary") {
+    const model = buildTemporaryProductionBatchPdfModel({
+      batch,
+      products,
+      categories,
+    });
+
+    const metaLines = [
+      `Generated On: ${model.generatedOn}`,
+      `Total SKUs: ${formatNumber(model.totalSkus)}`,
+      `Total Stock: ${formatNumber(model.totalStock)} pcs`,
+      "Mode: Temporary Stock Report (Unverified)",
+      `Source: ${titleCase(batch.source)}`,
+      `Submitted: ${batch.submittedAt ? formatDateTime(batch.submittedAt) : formatDate(batch.createdAt)}`,
+    ];
+
+    if (batch.name?.trim()) {
+      metaLines.push(`Batch: ${batch.name.trim()}`);
+    }
+
+    return renderMasterStockPdfDocument({
+      model,
+      fileName:
+        fileName ??
+        `OSHE_Samapura-Production-Stock_${new Date(batch.createdAt).toISOString().slice(0, 10)}.pdf`,
+      metaLines,
+    });
+  }
+
   const { jsPDF } = await import("jspdf");
   const autoTable = (await import("jspdf-autotable")).default;
 
@@ -376,15 +467,10 @@ export async function exportProductionBatchPdf({
   const marginX = 56;
   let cursorY = 72;
 
-  const isTemporary = reportType === "temporary";
-  const reportTitle = isTemporary
-    ? "Temporary Stock Report (Unverified)"
-    : "Final Verified Stock Report";
-  const reportDateLabel = isTemporary
-    ? `Submitted: ${batch.submittedAt ? formatDateTime(batch.submittedAt) : formatDate(batch.createdAt)}`
-    : `Completed: ${batch.completedAt ? formatDateTime(batch.completedAt) : formatDate(batch.updatedAt)}`;
+  const reportTitle = "Final Verified Stock Report";
+  const reportDateLabel = `Completed: ${batch.completedAt ? formatDateTime(batch.completedAt) : formatDate(batch.updatedAt)}`;
 
-  const rows = (isTemporary ? batch.items : batch.items.filter((item) => item.checked)).map((item, index) => {
+  const rows = batch.items.filter((item) => item.checked).map((item, index) => {
     const product = item.productId
       ? products.find((entry) => entry.id === item.productId)
       : undefined;
@@ -407,7 +493,7 @@ export async function exportProductionBatchPdf({
     };
   });
 
-  const totalQuantity = (isTemporary ? batch.items : batch.items.filter((item) => item.checked)).reduce(
+  const totalQuantity = batch.items.filter((item) => item.checked).reduce(
     (sum, item) => sum + item.quantity,
     0,
   );
@@ -470,9 +556,7 @@ export async function exportProductionBatchPdf({
     },
   });
 
-  const defaultFileName = isTemporary
-    ? `OSHE_Production-Batch-Temporary_${new Date(batch.createdAt).toISOString().slice(0, 10)}.pdf`
-    : `OSHE_Production-Batch-Final_${new Date(batch.updatedAt).toISOString().slice(0, 10)}.pdf`;
+  const defaultFileName = `OSHE_Production-Batch-Final_${new Date(batch.updatedAt).toISOString().slice(0, 10)}.pdf`;
 
   doc.save(fileName ?? defaultFileName);
 }

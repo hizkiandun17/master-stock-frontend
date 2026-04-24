@@ -101,12 +101,14 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
     );
   }
 
-  if (currentUserRole === "production") {
+  const isProductionView = currentUserRole === "production";
+
+  if (isProductionView && plan.status !== "completed") {
     return (
       <MasterStockShell currentPath="dispatch">
         <section className="space-y-4">
           <Link
-            href="/master-stock/incoming"
+            href="/master-stock/batches"
             className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -114,10 +116,120 @@ export function ProductionPlanDetailPage({ planId }: { planId: string }) {
           </Link>
           <Card className="border-white/10">
             <CardContent className="px-5 py-12">
-              <h1 className="text-xl font-semibold text-foreground">Dispatch is internal-only</h1>
+              <h1 className="text-xl font-semibold text-foreground">Dispatch is not shared yet</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                Craftsman users only have access to Production Batch records. Dispatch stays with the internal team.
+                This dispatch is still being prepared by the internal team. It will appear here after it is completed.
               </p>
+            </CardContent>
+          </Card>
+        </section>
+      </MasterStockShell>
+    );
+  }
+
+  if (isProductionView) {
+    return (
+      <MasterStockShell currentPath="dispatch">
+        <section className="space-y-6">
+          <Link
+            href="/master-stock/batches"
+            className={buttonVariants({ variant: "outline", className: "min-h-11 w-fit" })}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Link>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{plan.name}</h1>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span>
+                {titleCase(plan.source)} • {planItems.length} item
+                {planItems.length === 1 ? "" : "s"} • {totalQuantity} pcs
+              </span>
+              <span className="rounded-full bg-white px-2.5 py-1 text-[11px] uppercase tracking-[0.18em] text-black">
+                {titleCase(plan.status)}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Completed dispatch shared by the internal team for craftsman reference.
+            </p>
+          </div>
+
+          <Card className="border-white/10">
+            <CardContent className="grid gap-3 p-4 md:grid-cols-3 md:p-5">
+              <div className="rounded-2xl border border-white/10 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Source</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{titleCase(plan.source)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Total Items</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{planItems.length}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Total Quantity</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">{totalQuantity} pcs</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 px-4 py-3 md:col-span-3">
+                <div className="grid gap-3 text-sm text-muted-foreground md:grid-cols-3">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Created</p>
+                    <p className="mt-2 text-foreground">{formatDate(plan.createdAt)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Completed</p>
+                    <p className="mt-2 text-foreground">
+                      {plan.completedAt ? formatDateTime(plan.completedAt) : "-"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Notes</p>
+                    <p className="mt-2 text-foreground">{plan.notes?.trim() || "-"}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10">
+            <CardContent className="space-y-3 p-4 md:p-5">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-foreground">Sent Items</h2>
+                <p className="text-sm text-muted-foreground">
+                  Reference list of what the internal team sent in this dispatch.
+                </p>
+              </div>
+
+              {planItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
+                  No products were added to this dispatch.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {planItems.map((item) => {
+                    const product = safeProducts.find((entry) => entry.id === item.productId);
+                    const category = safeCategories.find((entry) => entry.id === product?.categoryId);
+                    if (!product) return null;
+
+                    return (
+                      <div
+                        key={item.productId}
+                        className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 px-4 py-4"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {product.sku}
+                            {category?.name ? ` • ${category.name}` : ""}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-sm font-semibold text-foreground">
+                          {item.quantity} pcs
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>

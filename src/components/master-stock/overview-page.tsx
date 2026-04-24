@@ -34,7 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { useMasterStock } from "@/lib/master-stock-context";
 import { exportMasterStockPdf } from "@/lib/pdf-export";
-import { getCategoryName, getProductTotal } from "@/lib/stock-helpers";
+import { getCategoryName, getProductTotal, LOW_STOCK_LIMIT } from "@/lib/stock-helpers";
 import type { Product } from "@/lib/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -78,6 +78,19 @@ interface EditStockDraft {
   sku: string;
   consignmentPrice: string;
   wholesalePrice: string;
+}
+
+type ProductHealthState = "normal" | "low" | "out";
+
+function getProductHealthState(product: Product): ProductHealthState {
+  const total = getProductTotal(product);
+  if (total === 0) {
+    return "out";
+  }
+  if (total <= LOW_STOCK_LIMIT) {
+    return "low";
+  }
+  return "normal";
 }
 
 interface StockActionMenuProps {
@@ -420,7 +433,7 @@ export function OverviewPage() {
     () =>
       activeProducts.filter((product) => {
         const total = getProductTotal(product);
-        return total > 0 && total < product.lowStockThreshold;
+        return total > 0 && total <= LOW_STOCK_LIMIT;
       }).length,
     [activeProducts],
   );
@@ -460,7 +473,7 @@ export function OverviewPage() {
         id: "low-stock",
         value: lowStockCount,
         label: "Low Stock",
-        helper: "Below threshold",
+        helper: `1-${LOW_STOCK_LIMIT} units left`,
         accent: "warning",
         interactive: true,
         targetTab: "active" as const,
@@ -493,7 +506,7 @@ export function OverviewPage() {
       const stockMatch =
         stockCondition === "all" ||
         (stockCondition === "out" && total === 0) ||
-        (stockCondition === "low" && total > 0 && total < product.lowStockThreshold);
+        (stockCondition === "low" && total > 0 && total <= LOW_STOCK_LIMIT);
       return searchMatch && categoryMatch && stockMatch;
     });
   }, [categoryId, search, stockCondition, visibleProducts]);
@@ -529,6 +542,13 @@ export function OverviewPage() {
   const detailConsignmentPrice = selectedProduct ? getConsignmentPrice(selectedProduct) : 0;
   const detailWholesalePrice = selectedProduct ? getWholesalePrice(selectedProduct) : 0;
   const detailMarketPrices = selectedProduct ? getMarketPrices(selectedProduct) : [];
+  const detailHealthState = selectedProduct ? getProductHealthState(selectedProduct) : "normal";
+  const detailHealthLabel =
+    detailHealthState === "out"
+      ? "Out of Stock"
+      : detailHealthState === "low"
+        ? "Low Stock"
+        : null;
 
   function stopRowClick(event: { stopPropagation: () => void }) {
     event.stopPropagation();
@@ -839,76 +859,100 @@ export function OverviewPage() {
 
         <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
           <div className="flex min-w-full gap-3 md:grid md:grid-cols-2 xl:grid-cols-5">
-          {summaryCards.map((card) => (
-            <div
-              key={card.id}
-              onClick={
-                card.interactive && card.targetTab && card.targetCondition
-                  ? () => toggleSummaryFilter(card.id, card.targetTab!, card.targetCondition!)
-                  : undefined
-              }
-              className={cn(
-                "min-w-[140px] shrink-0 rounded-[18px] border px-4 py-4 text-left md:min-w-0",
-                card.interactive
-                  ? "cursor-pointer bg-card transition-all duration-150 hover:-translate-y-1 hover:border-zinc-600 hover:bg-white/[0.03] active:scale-[0.98]"
-                  : "bg-zinc-950/70 border-zinc-900/80",
-                card.interactive && summarySelection === card.id
-                  ? "border-white bg-zinc-800/80"
-                  : card.interactive
-                    ? "border-border"
-                    : "",
-                card.accent === "danger" &&
-                  (card.interactive && summarySelection === card.id
-                    ? "border-danger/70 bg-danger/[0.08]"
-                    : "border-danger/20"),
-                card.accent === "warning" &&
-                  (card.interactive && summarySelection === card.id
-                    ? "border-warning/70 bg-warning/[0.08]"
+          {summaryCards.map((card) => {
+            const isActive = card.interactive && summarySelection === card.id;
+            const isCritical = card.accent === "danger";
+            const isWarning = card.accent === "warning";
+
+            return (
+              <div
+                key={card.id}
+                onClick={
+                  card.interactive && card.targetTab && card.targetCondition
+                    ? () => toggleSummaryFilter(card.id, card.targetTab!, card.targetCondition!)
+                    : undefined
+                }
+                className={cn(
+                  "min-w-[140px] shrink-0 rounded-[18px] border px-4 py-4 text-left md:min-w-0",
+                  card.interactive
+                    ? "cursor-pointer bg-card transition-all duration-150 hover:-translate-y-1 hover:border-zinc-600 hover:bg-white/[0.03] active:scale-[0.98]"
+                    : "border-zinc-900/80 bg-zinc-950/70",
+                  isActive
+                    ? "border-white bg-zinc-800/80"
                     : card.interactive
-                      ? "border-warning/20"
-                      : ""),
-              )}
-              role={card.interactive ? "button" : undefined}
-              tabIndex={card.interactive ? 0 : undefined}
-              onKeyDown={
-                card.interactive && card.targetTab && card.targetCondition
-                  ? (event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggleSummaryFilter(card.id, card.targetTab!, card.targetCondition!);
+                      ? "border-border"
+                      : "",
+                  isCritical &&
+                    (isActive
+                      ? "border-danger/70 shadow-[0_0_28px_rgba(220,38,38,0.14)]"
+                      : "border-danger/25 shadow-[0_0_22px_rgba(220,38,38,0.06)]"),
+                  isCritical && card.interactive && "hover:border-danger/50 hover:shadow-[0_0_30px_rgba(220,38,38,0.12)]",
+                  isWarning &&
+                    (isActive
+                      ? "border-warning/70 shadow-[0_0_28px_rgba(245,158,11,0.14)]"
+                      : "border-warning/25 shadow-[0_0_22px_rgba(245,158,11,0.06)]"),
+                  isWarning && card.interactive && "hover:border-warning/50 hover:shadow-[0_0_30px_rgba(245,158,11,0.12)]",
+                )}
+                role={card.interactive ? "button" : undefined}
+                tabIndex={card.interactive ? 0 : undefined}
+                onKeyDown={
+                  card.interactive && card.targetTab && card.targetCondition
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          toggleSummaryFilter(card.id, card.targetTab!, card.targetCondition!);
+                        }
                       }
-                    }
-                  : undefined
-              }
-              aria-pressed={card.interactive ? summarySelection === card.id : undefined}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p
-                    className={cn(
-                      "text-2xl font-semibold tracking-tight text-foreground",
-                      card.accent === "danger" && "text-danger",
-                      card.accent === "warning" && "text-warning",
-                    )}
-                  >
-                    {card.value}
-                  </p>
-                  <p className="mt-1 text-sm text-foreground">{card.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{card.helper}</p>
+                    : undefined
+                }
+                aria-pressed={card.interactive ? isActive : undefined}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      {(isCritical || isWarning) ? (
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            "h-2 w-2 rounded-full",
+                            isCritical && "bg-danger shadow-[0_0_10px_rgba(220,38,38,0.45)]",
+                            isWarning && "bg-warning shadow-[0_0_10px_rgba(245,158,11,0.45)]",
+                          )}
+                        />
+                      ) : null}
+                      <p
+                        className={cn(
+                          "text-2xl font-semibold tracking-tight text-foreground",
+                          isCritical && "text-danger",
+                          isWarning && "text-warning",
+                        )}
+                      >
+                        {card.value}
+                      </p>
+                    </div>
+                    <p className="mt-1 text-sm text-foreground">{card.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{card.helper}</p>
+                  </div>
+                  {card.interactive ? (
+                    <span
+                      className={cn(
+                        "pt-1 text-xs text-muted-foreground/80",
+                        isCritical && "text-danger/80",
+                        isWarning && "text-warning/80",
+                      )}
+                    >
+                      {isActive ? "Reset" : "→"}
+                    </span>
+                  ) : null}
                 </div>
                 {card.interactive ? (
-                  <span className="pt-1 text-xs text-muted-foreground/80">
-                    {summarySelection === card.id ? "Reset" : "→"}
-                  </span>
+                  <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
+                    {isActive ? "Click again to reset" : "Click to filter"}
+                  </p>
                 ) : null}
               </div>
-              {card.interactive ? (
-                <p className="mt-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground/70">
-                  {summarySelection === card.id ? "Click again to reset" : "Click to filter"}
-                </p>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
           </div>
         </div>
 
@@ -949,45 +993,80 @@ export function OverviewPage() {
                     No products match this filter.
                   </div>
                 ) : (
-                  paginatedProducts.map((product) => (
-                    <div
-                      key={product.id}
-                      className="rounded-[18px] border border-white/10 bg-card px-4 py-3.5 transition-colors active:bg-white/[0.04]"
-                      onClick={() => setSelectedProduct(product)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedProduct(product);
-                        }
-                      }}
-                    >
-                      <div className="flex min-h-[56px] items-center justify-between gap-4">
-                        <div className="flex min-w-0 flex-1 items-center gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border bg-white text-xs font-semibold text-black">
-                            {product.imageHint}
+                  paginatedProducts.map((product) => {
+                    const healthState = getProductHealthState(product);
+                    const totalStock = getProductTotal(product);
+
+                    return (
+                      <div
+                        key={product.id}
+                        className={cn(
+                          "rounded-[18px] border bg-card px-4 py-3.5 transition-colors active:bg-white/[0.04]",
+                          healthState === "out" && "border-danger/30 bg-danger/[0.03]",
+                          healthState === "low" && "border-warning/30 bg-warning/[0.03]",
+                          healthState === "normal" && "border-white/10",
+                        )}
+                        onClick={() => setSelectedProduct(product)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedProduct(product);
+                          }
+                        }}
+                      >
+                        <div className="flex min-h-[56px] items-center justify-between gap-4">
+                          <div className="flex min-w-0 flex-1 items-center gap-3">
+                            <div
+                              className={cn(
+                                "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-white text-xs font-semibold text-black",
+                                healthState === "out" && "border-danger/35 shadow-[0_0_0_1px_rgba(220,38,38,0.12)]",
+                                healthState === "low" && "border-warning/35 shadow-[0_0_0_1px_rgba(245,158,11,0.12)]",
+                                healthState === "normal" && "border-border",
+                              )}
+                            >
+                              {product.imageHint}
+                            </div>
+                            <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                              <div className="flex items-start gap-2">
+                                {healthState !== "normal" ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                                      healthState === "out" && "bg-danger",
+                                      healthState === "low" && "bg-warning",
+                                    )}
+                                  />
+                                ) : null}
+                                <p className="line-clamp-2 text-sm font-medium leading-[1.25] text-foreground">
+                                  {product.name}
+                                </p>
+                              </div>
+                              <p className="text-xs leading-none text-muted-foreground">
+                                {product.sku}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-                            <p className="line-clamp-2 text-sm font-medium leading-[1.25] text-foreground">
-                              {product.name}
+                          <div className="flex min-w-[52px] shrink-0 flex-col items-end justify-center text-right">
+                            <p
+                              className={cn(
+                                "text-lg font-semibold leading-none tracking-tight text-foreground",
+                                healthState === "out" && "text-danger",
+                                healthState === "low" && "text-warning",
+                              )}
+                            >
+                              {totalStock}
                             </p>
-                            <p className="text-xs leading-none text-muted-foreground">
-                              {product.sku}
+                            <p className="mt-1.5 text-[11px] uppercase leading-none tracking-[0.14em] text-muted-foreground">
+                              Total
                             </p>
                           </div>
-                        </div>
-                        <div className="flex min-w-[52px] shrink-0 flex-col items-end justify-center text-right">
-                          <p className="text-lg font-semibold leading-none tracking-tight text-foreground">
-                            {getProductTotal(product)}
-                          </p>
-                          <p className="mt-1.5 text-[11px] uppercase leading-none tracking-[0.14em] text-muted-foreground">
-                            Total
-                          </p>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             ) : null}
@@ -1015,62 +1094,103 @@ export function OverviewPage() {
                       </td>
                     </tr>
                   ) : (
-                    paginatedProducts.map((product) => (
-                      <tr
-                        key={product.id}
-                        className="cursor-pointer transition-colors hover:bg-white/[0.02]"
-                        onClick={() => setSelectedProduct(product)}
-                      >
-                        <td className="px-4 py-4">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-white text-xs font-semibold text-black">
-                            {product.imageHint}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          <div className="space-y-1">
-                            <p className="font-medium leading-snug">{product.name}</p>
-                            <p className="text-xs text-muted-foreground">{product.sku}</p>
-                          </div>
-                        </td>
-                        <td className="px-4 py-4 align-top text-muted-foreground">
-                          {getCategoryName(product.categoryId, sortedCategories)}
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          {product.currentStock.indira} Total
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          {product.currentStock.mita} Total
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          {product.currentStock.warehouse} Total
-                        </td>
-                        <td className="px-4 py-4 align-top">
-                          <div className="space-y-1">
-                            <p>{getProductTotal(product)} Total</p>
-                          </div>
-                        </td>
-                        <td className="relative px-4 py-4 align-top" onClick={stopRowClick}>
-                          <StockActionMenu
-                            product={product}
-                            open={openActionMenuId === product.id}
-                            onToggle={() =>
-                              setOpenActionMenuId((current) =>
-                                current === product.id ? null : product.id,
-                              )
-                            }
-                            actionMenuRef={actionMenuRef}
-                            onView={() => {
-                              setOpenActionMenuId(null);
-                              setSelectedProduct(product);
-                            }}
-                            onEdit={() => openEditStock(product)}
-                            onDelete={() => handleDelete(product)}
-                            onArchive={() => handleArchive(product)}
-                            onHistory={() => handleViewHistory(product)}
-                          />
-                        </td>
-                      </tr>
-                    ))
+                    paginatedProducts.map((product) => {
+                      const healthState = getProductHealthState(product);
+                      const totalStock = getProductTotal(product);
+
+                      return (
+                        <tr
+                          key={product.id}
+                          className={cn(
+                            "cursor-pointer transition-colors hover:bg-white/[0.02]",
+                            healthState === "out" && "bg-danger/[0.025]",
+                            healthState === "low" && "bg-warning/[0.025]",
+                          )}
+                          onClick={() => setSelectedProduct(product)}
+                        >
+                          <td className="px-4 py-4">
+                            <div
+                              className={cn(
+                                "flex h-10 w-10 items-center justify-center rounded-xl border bg-white text-xs font-semibold text-black",
+                                healthState === "out" && "border-danger/35 shadow-[0_0_0_1px_rgba(220,38,38,0.12)]",
+                                healthState === "low" && "border-warning/35 shadow-[0_0_0_1px_rgba(245,158,11,0.12)]",
+                                healthState === "normal" && "border-border",
+                              )}
+                            >
+                              {product.imageHint}
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <div className="space-y-1">
+                              <div className="flex items-start gap-2">
+                                {healthState !== "normal" ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className={cn(
+                                      "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                                      healthState === "out" && "bg-danger",
+                                      healthState === "low" && "bg-warning",
+                                    )}
+                                  />
+                                ) : null}
+                                <p className="font-medium leading-snug">{product.name}</p>
+                              </div>
+                              <p className="text-xs text-muted-foreground">{product.sku}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 align-top text-muted-foreground">
+                            {getCategoryName(product.categoryId, sortedCategories)}
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            {product.currentStock.indira} Total
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            {product.currentStock.mita} Total
+                          </td>
+                          <td
+                            className={cn(
+                              "px-4 py-4 align-top",
+                              healthState === "out" && "font-medium text-danger",
+                              healthState === "low" && "font-medium text-warning",
+                            )}
+                          >
+                            {product.currentStock.warehouse} Total
+                          </td>
+                          <td className="px-4 py-4 align-top">
+                            <div className="space-y-1">
+                              <p
+                                className={cn(
+                                  healthState === "out" && "font-semibold text-danger",
+                                  healthState === "low" && "font-semibold text-warning",
+                                )}
+                              >
+                                {totalStock} Total
+                              </p>
+                            </div>
+                          </td>
+                          <td className="relative px-4 py-4 align-top" onClick={stopRowClick}>
+                            <StockActionMenu
+                              product={product}
+                              open={openActionMenuId === product.id}
+                              onToggle={() =>
+                                setOpenActionMenuId((current) =>
+                                  current === product.id ? null : product.id,
+                                )
+                              }
+                              actionMenuRef={actionMenuRef}
+                              onView={() => {
+                                setOpenActionMenuId(null);
+                                setSelectedProduct(product);
+                              }}
+                              onEdit={() => openEditStock(product)}
+                              onDelete={() => handleDelete(product)}
+                              onArchive={() => handleArchive(product)}
+                              onHistory={() => handleViewHistory(product)}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1129,6 +1249,8 @@ export function OverviewPage() {
         overlayClassName={isMobileViewport ? "items-center p-4" : undefined}
         className={cn(
           "border-white/10 bg-[#09090b] md:max-w-4xl",
+          detailHealthState === "out" && "border-danger/35 shadow-[0_0_40px_rgba(220,38,38,0.12)]",
+          detailHealthState === "low" && "border-warning/35 shadow-[0_0_40px_rgba(245,158,11,0.12)]",
           isMobileViewport &&
             "h-auto max-h-[calc(100vh-56px)] w-full max-w-[390px] rounded-[22px] border",
         )}
@@ -1147,6 +1269,28 @@ export function OverviewPage() {
         {selectedProduct ? (
           isMobileViewport ? (
             <div className="space-y-5">
+              {detailHealthLabel ? (
+                <div className="flex justify-center">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]",
+                      detailHealthState === "out" && "border-danger/35 bg-danger/[0.08] text-danger",
+                      detailHealthState === "low" && "border-warning/35 bg-warning/[0.08] text-warning",
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        detailHealthState === "out" && "bg-danger",
+                        detailHealthState === "low" && "bg-warning",
+                      )}
+                    />
+                    {detailHealthLabel}
+                  </span>
+                </div>
+              ) : null}
+
               <ProductPreview product={selectedProduct} className="rounded-[18px] p-6" />
 
               <div className="rounded-[18px] border border-white/[0.04] bg-white/[0.03] px-4 py-4">
@@ -1175,9 +1319,22 @@ export function OverviewPage() {
                 <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
                   Stock Distribution
                 </p>
-                <div className="grid grid-cols-3 gap-2 rounded-2xl bg-white/[0.03] px-3 py-3 text-center">
+                <div
+                  className={cn(
+                    "grid grid-cols-3 gap-2 rounded-2xl px-3 py-3 text-center",
+                    detailHealthState === "out" && "border border-danger/25 bg-danger/[0.05]",
+                    detailHealthState === "low" && "border border-warning/25 bg-warning/[0.05]",
+                    detailHealthState === "normal" && "bg-white/[0.03]",
+                  )}
+                >
                   <div>
-                    <p className="text-lg font-semibold tracking-tight">
+                    <p
+                      className={cn(
+                        "text-lg font-semibold tracking-tight",
+                        detailHealthState === "out" && "text-danger",
+                        detailHealthState === "low" && "text-warning",
+                      )}
+                    >
                       {selectedProduct.currentStock.warehouse}
                     </p>
                     <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
@@ -1201,7 +1358,13 @@ export function OverviewPage() {
                     </p>
                   </div>
                 </div>
-                <p className="text-right text-xs text-muted-foreground">
+                <p
+                  className={cn(
+                    "text-right text-xs text-muted-foreground",
+                    detailHealthState === "out" && "text-danger",
+                    detailHealthState === "low" && "text-warning",
+                  )}
+                >
                   Total: {getProductTotal(selectedProduct)} pcs
                 </p>
               </div>
@@ -1258,6 +1421,28 @@ export function OverviewPage() {
               </div>
 
               <div className="space-y-7">
+                {detailHealthLabel ? (
+                  <div>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.18em]",
+                        detailHealthState === "out" && "border-danger/35 bg-danger/[0.08] text-danger",
+                        detailHealthState === "low" && "border-warning/35 bg-warning/[0.08] text-warning",
+                      )}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          "h-2 w-2 rounded-full",
+                          detailHealthState === "out" && "bg-danger",
+                          detailHealthState === "low" && "bg-warning",
+                        )}
+                      />
+                      {detailHealthLabel}
+                    </span>
+                  </div>
+                ) : null}
+
                 <div className="space-y-2">
                   <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
                     Category
@@ -1269,9 +1454,22 @@ export function OverviewPage() {
                   <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
                     Stock Distribution
                   </p>
-                  <div className="grid gap-3 rounded-[22px] bg-white/[0.03] p-4 sm:grid-cols-3">
+                  <div
+                    className={cn(
+                      "grid gap-3 rounded-[22px] p-4 sm:grid-cols-3",
+                      detailHealthState === "out" && "border border-danger/25 bg-danger/[0.05]",
+                      detailHealthState === "low" && "border border-warning/25 bg-warning/[0.05]",
+                      detailHealthState === "normal" && "bg-white/[0.03]",
+                    )}
+                  >
                     <div>
-                      <p className="text-3xl font-semibold tracking-tight">
+                      <p
+                        className={cn(
+                          "text-3xl font-semibold tracking-tight",
+                          detailHealthState === "out" && "text-danger",
+                          detailHealthState === "low" && "text-warning",
+                        )}
+                      >
                         {getProductTotal(selectedProduct)}
                       </p>
                       <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">
@@ -1291,7 +1489,13 @@ export function OverviewPage() {
                       </p>
                     </div>
                   </div>
-                  <p className="text-right text-sm text-muted-foreground">
+                  <p
+                    className={cn(
+                      "text-right text-sm text-muted-foreground",
+                      detailHealthState === "out" && "text-danger",
+                      detailHealthState === "low" && "text-warning",
+                    )}
+                  >
                     Total: {getProductTotal(selectedProduct)} pcs
                   </p>
                 </div>

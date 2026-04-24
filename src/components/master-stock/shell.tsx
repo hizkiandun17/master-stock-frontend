@@ -104,18 +104,16 @@ export function MasterStockShell({
             >
               Production Batch
             </Link>
-            {currentUserRole !== "production" ? (
-              <Link
-                href="/master-stock/batches"
-                className={
-                  currentPath === "dispatch"
-                    ? "whitespace-nowrap rounded-full bg-accent px-4 py-2.5 text-sm text-foreground"
-                    : "whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-                }
-              >
-                Dispatch
-              </Link>
-            ) : null}
+            <Link
+              href="/master-stock/batches"
+              className={
+                currentPath === "dispatch"
+                  ? "whitespace-nowrap rounded-full bg-accent px-4 py-2.5 text-sm text-foreground"
+                  : "whitespace-nowrap rounded-full px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+              }
+            >
+              Dispatch
+            </Link>
           </div>
         </div>
         {children}

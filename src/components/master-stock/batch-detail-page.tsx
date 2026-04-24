@@ -82,6 +82,27 @@ function getIncomingItemMeta(item: BatchPlannedItem, products: Product[]) {
   return `${product.sku} • ${getCategoryName(product.categoryId, [])}`;
 }
 
+function getIncomingItemCategoryName(
+  item: BatchPlannedItem,
+  products: Product[],
+  categories: { id: string; name: string; order: number }[],
+) {
+  if (item.isCustom) {
+    return "CUSTOM ITEMS";
+  }
+
+  if (!item.productId) {
+    return "UNCATEGORIZED";
+  }
+
+  const product = products.find((entry) => entry.id === item.productId);
+  if (!product) {
+    return "UNCATEGORIZED";
+  }
+
+  return getCategoryName(product.categoryId, categories) || "UNCATEGORIZED";
+}
+
 export function BatchDetailPage({ batchId }: { batchId: string }) {
   const {
     batches,
@@ -116,6 +137,40 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const safeProducts = products ?? [];
   const safeCategories = categories ?? [];
   const incomingItems = incoming?.items ?? [];
+  const previewGroups = useMemo(() => {
+    const categoryOrder = new Map(safeCategories.map((category) => [category.name, category.order]));
+    const groups = incomingItems.reduce<
+      Array<{
+        category: string;
+        order: number;
+        items: BatchPlannedItem[];
+      }>
+    >((accumulator, item) => {
+      const category = getIncomingItemCategoryName(item, safeProducts, safeCategories);
+      const existingGroup = accumulator.find((entry) => entry.category === category);
+
+      if (existingGroup) {
+        existingGroup.items.push(item);
+        return accumulator;
+      }
+
+      accumulator.push({
+        category,
+        order: categoryOrder.get(category) ?? Number.MAX_SAFE_INTEGER,
+        items: [item],
+      });
+
+      return accumulator;
+    }, []);
+
+    return groups.sort((left, right) => {
+      if (left.order !== right.order) {
+        return left.order - right.order;
+      }
+
+      return left.category.localeCompare(right.category);
+    });
+  }, [incomingItems, safeCategories, safeProducts]);
   const selectedProductIds = useMemo(
     () =>
       new Set(
@@ -479,6 +534,86 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderCompletedRows() {
+    if (checkedItems.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-muted-foreground">
+          No checked items were applied to stock.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {checkedItems.map((item) => {
+          const product = item.productId
+            ? safeProducts.find((entry) => entry.id === item.productId)
+            : undefined;
+          const itemName = getIncomingItemName(item, safeProducts);
+          const itemMeta = item.isCustom
+            ? item.note?.trim()
+              ? `Temporary custom item • ${item.note.trim()}`
+              : "Temporary custom item"
+            : product
+              ? `${product.sku} • ${getCategoryName(product.categoryId, safeCategories)}`
+              : "Missing from master stock";
+
+          return (
+            <div
+              key={item.id}
+              className={cn(
+                "rounded-2xl border border-white/10 px-4 py-4",
+                item.isCustom ? "bg-white/[0.02]" : "",
+              )}
+            >
+              <div className="flex items-start justify-between gap-4 md:hidden">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{itemName}</p>
+                    {item.isCustom ? (
+                      <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Custom
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{itemMeta}</p>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Qty
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{item.quantity} pcs</p>
+                </div>
+              </div>
+
+              <div className="hidden items-center justify-between gap-4 md:flex">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium text-foreground">{itemName}</p>
+                    {item.isCustom ? (
+                      <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Custom
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="text-xs text-muted-foreground">{itemMeta}</p>
+                </div>
+
+                <div className="shrink-0 rounded-2xl border border-white/10 px-4 py-3 text-right md:min-w-[132px]">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Final Qty
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-foreground">{item.quantity} pcs</p>
+                </div>
               </div>
             </div>
           );
@@ -1296,7 +1431,22 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-3 gap-2 md:hidden">
+                <div className="rounded-2xl border border-white/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Source</p>
+                  <p className="mt-1.5 truncate text-sm font-semibold text-foreground">{sourceLabel}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Items</p>
+                  <p className="mt-1.5 text-sm font-semibold text-foreground">{checkedCount}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 px-3 py-3">
+                  <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">Qty</p>
+                  <p className="mt-1.5 text-sm font-semibold text-foreground">{checkedTotal} pcs</p>
+                </div>
+              </div>
+
+              <div className="hidden gap-3 md:grid md:grid-cols-3">
                 <div className="rounded-2xl border border-white/10 px-4 py-4">
                   <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Source</p>
                   <p className="mt-2 text-lg font-semibold text-foreground">{sourceLabel}</p>
@@ -1311,7 +1461,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 </div>
               </div>
 
-              {renderVerificationRows()}
+              {renderCompletedRows()}
             </CardContent>
           </Card>
         ) : null}
@@ -1336,17 +1486,28 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
         {incomingItems.length === 0 ? (
           <p className="py-4 text-sm text-muted-foreground">No submitted items yet.</p>
         ) : (
-          incomingItems.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center justify-between gap-4 border-b border-white/10 py-3 last:border-b-0"
-            >
-              <p className="min-w-0 truncate text-sm text-foreground">
-                {getIncomingItemName(item, safeProducts)}
-              </p>
-              <p className="shrink-0 text-sm font-medium text-foreground">{item.quantity} pcs</p>
-            </div>
-          ))
+          <div className="space-y-5">
+            {previewGroups.map((group) => (
+              <section key={group.category} className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {group.category}
+                </h3>
+                <div className="space-y-0">
+                  {group.items.map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between gap-4 border-b border-white/10 py-3 last:border-b-0"
+                    >
+                      <p className="min-w-0 truncate text-sm text-foreground">
+                        {getIncomingItemName(item, safeProducts)}
+                      </p>
+                      <p className="shrink-0 text-sm font-medium text-foreground">{item.quantity} pcs</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
       </Dialog>
 
@@ -1388,12 +1549,28 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
         {activeIncoming.status === "submitted" ? (
-          <Button
-            onClick={() => startReceivingIncoming(activeIncoming.id)}
-            className="min-h-12 w-full"
-          >
-            Receive
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() =>
+                exportProductionBatchPdf({
+                  batch: activeIncoming,
+                  products: safeProducts,
+                  categories: safeCategories,
+                  reportType: "temporary",
+                })
+              }
+              className="min-h-12 flex-1"
+            >
+              Export Temporary PDF
+            </Button>
+            <Button
+              onClick={() => startReceivingIncoming(activeIncoming.id)}
+              className="min-h-12 flex-1"
+            >
+              Receive
+            </Button>
+          </div>
         ) : null}
 
         {activeIncoming.status === "receiving" ? (

@@ -123,6 +123,17 @@ describe("Production Batch", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: /Completed summary/i })).toBeInTheDocument(),
     );
+    expect(
+      screen.queryByRole("checkbox", {
+        name: /Check 4EVER Bracelet \| Gold \| Valentine's Day Edition/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: /Remove 4EVER Bracelet \| Gold \| Valentine's Day Edition/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Final Qty/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Show Activity/i }));
     expect(screen.getByText(/Completed production batch/i)).toBeInTheDocument();
@@ -184,6 +195,8 @@ describe("Production Batch", () => {
     await user.click(await screen.findByRole("button", { name: /Preview 8 Items/i }));
 
     expect(screen.getByRole("dialog", { name: /Submitted Items/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/VALENTINE'S DAY EDITION/i)[0]).toBeVisible();
+    expect(screen.getAllByText(/RAMADHAN EDITION/i)[0]).toBeVisible();
     expect(screen.getByText(/4EVER Bracelet \| Gold \| Valentine's Day Edition/i)).toBeVisible();
     expect(screen.getByText(/Laylat al-Qadr Bracelet \| Gold \| Ramadhan Edition/i)).toBeVisible();
   });

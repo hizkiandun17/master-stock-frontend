@@ -1,5 +1,7 @@
 import type { BatchStatus, Product, ProductionBatch, StockStatus } from "@/lib/types";
 
+export const LOW_STOCK_LIMIT = 3;
+
 export function getCategoryName(categoryId: string, categories: { id: string; name: string }[]) {
   return categories.find((category) => category.id === categoryId)?.name ?? "Uncategorized";
 }
@@ -19,7 +21,7 @@ export function getStockStatus(product: Product): StockStatus {
     return "out";
   }
 
-  if (total <= product.lowStockThreshold) {
+  if (total <= LOW_STOCK_LIMIT) {
     return "low";
   }
 

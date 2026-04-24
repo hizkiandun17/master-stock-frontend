@@ -91,7 +91,7 @@ describe("Dispatch", () => {
     expect(screen.getByText(/Completed batch/i)).toBeInTheDocument();
   });
 
-  it("blocks direct dispatch access for production users", async () => {
+  it("shows completed dispatch records to production users as read-only", async () => {
     window.localStorage.clear();
     window.localStorage.setItem(
       "master-stock-state-v2",
@@ -102,16 +102,51 @@ describe("Dispatch", () => {
             id: "dispatch-2",
             name: "Mita Dispatch",
             source: "mita",
-            items: [],
+            items: [{ productId: "prod-1", quantity: 12, plannedQty: 12 }],
             createdAt: "2026-04-17T03:00:00.000Z",
-            status: "draft",
+            completedAt: "2026-04-17T05:30:00.000Z",
+            status: "completed",
           },
         ],
       }),
     );
 
-    renderWithProviders(<ProductionPlanDetailPage planId="dispatch-2" />);
+    renderWithProviders(<ProductionPlansPage />);
 
-    expect(await screen.findByText(/Dispatch is internal-only/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /^Dispatch$/i })).toBeInTheDocument();
+    expect(screen.getByText(/What the internal team has sent out for craftsman handling/i)).toBeInTheDocument();
+    expect(screen.getByText(/Mita Dispatch/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create Dispatch/i })).not.toBeInTheDocument();
+  });
+
+  it("shows a read-only dispatch detail to production users", async () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "master-stock-state-v2",
+      JSON.stringify({
+        currentUserRole: "production",
+        productionPlans: [
+          {
+            id: "dispatch-3",
+            name: "Indira Dispatch Week 3",
+            source: "indira",
+            notes: "Sent for bracelet finishing.",
+            items: [{ productId: "prd-1", quantity: 18, plannedQty: 18 }],
+            createdAt: "2026-04-17T03:00:00.000Z",
+            completedAt: "2026-04-17T05:30:00.000Z",
+            status: "completed",
+          },
+        ],
+      }),
+    );
+
+    renderWithProviders(<ProductionPlanDetailPage planId="dispatch-3" />);
+
+    expect(await screen.findByRole("heading", { name: /Indira Dispatch Week 3/i })).toBeInTheDocument();
+    expect(screen.getByText(/Completed dispatch shared by the internal team/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Sent Items/i })).toBeInTheDocument();
+    expect(screen.getByText(/4EVER Bracelet/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/18 pcs/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Export PDF/i })).not.toBeInTheDocument();
   });
 });
