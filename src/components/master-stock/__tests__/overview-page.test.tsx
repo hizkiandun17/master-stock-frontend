@@ -1,6 +1,7 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import { OverviewPage } from "@/components/master-stock/overview-page";
 import { AppProviders } from "@/components/providers/app-providers";
@@ -12,6 +13,17 @@ function renderOverview() {
       <OverviewPage />
     </AppProviders>,
   );
+}
+
+function setViewportWidth(width: number) {
+  act(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: width,
+    });
+    window.dispatchEvent(new Event("resize"));
+  });
 }
 
 describe("OverviewPage", () => {
@@ -156,6 +168,130 @@ describe("OverviewPage", () => {
         name: /4EVER Bracelet \| Gold \| Valentine's Day Edition/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps mobile stock cards clean without per-card action buttons", () => {
+    setViewportWidth(480);
+    renderOverview();
+
+    expect(
+      screen.queryByRole("button", {
+        name: /Open actions for 4EVER Bracelet \| Gold \| Valentine's Day Edition/i,
+      }),
+    ).not.toBeInTheDocument();
+
+    setViewportWidth(1024);
+  });
+
+  it("enters mobile selection mode on long press and opens bulk actions", async () => {
+    vi.useFakeTimers();
+
+    try {
+      setViewportWidth(480);
+      renderOverview();
+
+      const card = screen
+        .getByText(/4EVER Bracelet \| Gold \| Valentine's Day Edition/i)
+        .closest('[role="button"]');
+
+      expect(card).not.toBeNull();
+
+      fireEvent.pointerDown(card!, {
+        pointerType: "touch",
+        clientX: 10,
+        clientY: 10,
+      });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      fireEvent.pointerUp(card!, { pointerType: "touch" });
+
+      expect(screen.getByText(/1 selected/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /Open bulk actions/i }),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /Open bulk actions/i }));
+
+      expect(screen.getAllByText(/^Actions$/i).length).toBeGreaterThan(0);
+      expect(screen.getByRole("button", { name: /View Details & QR/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Edit Stock/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Archive Stock/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^Delete$/i })).toBeInTheDocument();
+    } finally {
+      act(() => {
+        vi.runOnlyPendingTimers();
+      });
+      vi.useRealTimers();
+      setViewportWidth(1024);
+    }
+  });
+
+  it("keeps mobile scroll gestures from toggling selection", () => {
+    try {
+      setViewportWidth(480);
+      renderOverview();
+
+      const card = screen
+        .getByText(/4EVER Bracelet \| Gold \| Valentine's Day Edition/i)
+        .closest('[role="button"]');
+
+      expect(card).not.toBeNull();
+
+      fireEvent.wheel(card!, { deltaY: 120 });
+
+      expect(screen.queryByText(/1 selected/i)).not.toBeInTheDocument();
+    } finally {
+      setViewportWidth(1024);
+    }
+  });
+
+  it("clears mobile selection UI after archive so the list remains interactive", () => {
+    vi.useFakeTimers();
+
+    try {
+      setViewportWidth(480);
+      renderOverview();
+
+      const card = screen
+        .getByText(/4EVER Bracelet \| Gold \| Valentine's Day Edition/i)
+        .closest('[role="button"]');
+
+      expect(card).not.toBeNull();
+
+      fireEvent.pointerDown(card!, {
+        pointerType: "touch",
+        clientX: 10,
+        clientY: 10,
+      });
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      fireEvent.pointerUp(card!, { pointerType: "touch" });
+      fireEvent.click(screen.getByRole("button", { name: /Open bulk actions/i }));
+      fireEvent.click(screen.getByRole("button", { name: /Archive Stock/i }));
+
+      expect(screen.queryByText(/1 selected/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Close bulk actions/i)).not.toBeInTheDocument();
+
+      const nextCard = screen
+        .getByText(/4EVER Bracelet \| Silver \| Valentine's Day Edition/i)
+        .closest('[role="button"]');
+
+      expect(nextCard).not.toBeNull();
+      fireEvent.click(nextCard!);
+      expect(
+        screen.getByRole("heading", {
+          name: /4EVER Bracelet \| Silver \| Valentine's Day Edition/i,
+        }),
+      ).toBeInTheDocument();
+    } finally {
+      act(() => {
+        vi.runOnlyPendingTimers();
+      });
+      vi.useRealTimers();
+      setViewportWidth(1024);
+    }
   });
 
   it("opens edit stock prices modal from the row action dropdown", async () => {

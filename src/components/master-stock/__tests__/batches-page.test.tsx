@@ -274,7 +274,7 @@ describe("Production Batch", () => {
     expect(screen.getByPlaceholderText(/Search product or SKU/i)).toBeInTheDocument();
   });
 
-  it("lets production users cancel a submitted batch before internal receiving", async () => {
+  it("locks a cancelled submitted batch and creates a draft revision when editing again", async () => {
     const user = userEvent.setup();
     window.localStorage.clear();
     window.localStorage.setItem(
@@ -315,12 +315,42 @@ describe("Production Batch", () => {
       const persistedState = JSON.parse(
         window.localStorage.getItem("master-stock-state-v2") ?? "{}",
       ) as {
-        batches?: Array<{ id: string; status: string; submittedAt?: string }>;
+        batches?: Array<{ id: string; status: string; submittedAt?: string; cancelledAt?: string }>;
       };
 
       const updatedIncoming = persistedState.batches?.find((entry) => entry.id === "incoming-12");
-      expect(updatedIncoming?.status).toBe("draft");
-      expect(updatedIncoming?.submittedAt).toBeUndefined();
+      expect(updatedIncoming?.status).toBe("cancelled");
+      expect(updatedIncoming?.submittedAt).toBe("2026-04-17T04:00:00.000Z");
+      expect(updatedIncoming?.cancelledAt).toBeTruthy();
     });
+
+    expect(await screen.findByText(/Cancelled summary/i)).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /Edit Again/i })[0]);
+
+    await waitFor(() => {
+      const persistedState = JSON.parse(
+        window.localStorage.getItem("master-stock-state-v2") ?? "{}",
+      ) as {
+        batches?: Array<{
+          id: string;
+          status: string;
+          previousRevisionId?: string;
+          revisionNumber?: number;
+          items?: Array<{ productId?: string; quantity: number }>;
+        }>;
+      };
+
+      const originalIncoming = persistedState.batches?.find((entry) => entry.id === "incoming-12");
+      const revision = persistedState.batches?.find(
+        (entry) => entry.previousRevisionId === "incoming-12",
+      );
+
+      expect(originalIncoming?.status).toBe("cancelled");
+      expect(revision?.status).toBe("draft");
+      expect(revision?.revisionNumber).toBe(2);
+      expect(revision?.items?.[0]).toMatchObject({ productId: "prd-1", quantity: 4 });
+    });
+
+    expect(pushMock).toHaveBeenCalledWith(expect.stringMatching(/^\/master-stock\/incoming\/incoming-/));
   });
 });

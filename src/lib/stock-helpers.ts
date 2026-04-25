@@ -90,9 +90,13 @@ export function getBatchStatusLabel(status: BatchStatus) {
     return "Receiving";
   }
 
+  if (status === "cancelled") {
+    return "Cancelled";
+  }
+
   return status === "completed" ? "Completed" : "Draft";
 }
 
 export function isBatchEditable(status: BatchStatus) {
-  return status !== "completed";
+  return status === "draft" || status === "receiving";
 }

@@ -3,7 +3,7 @@ export type StockStatus = "healthy" | "low" | "out";
 export type StockLocationKey = "indira" | "mita" | "warehouse";
 export type ProductionPlanSource = "indira" | "mita";
 export type ProductionPlanStatus = "draft" | "completed";
-export type BatchStatus = "draft" | "submitted" | "receiving" | "completed";
+export type BatchStatus = "draft" | "submitted" | "receiving" | "completed" | "cancelled";
 export type ActivityKind = "created" | "added" | "removed" | "edited" | "completed";
 
 export interface Category {
@@ -81,10 +81,13 @@ export interface ProductionBatch {
   source: StockLocationKey;
   status: BatchStatus;
   notes?: string;
+  revisionNumber?: number;
+  previousRevisionId?: string;
   createdAt: string;
   updatedAt: string;
   createdBy: string;
   submittedAt?: string;
+  cancelledAt?: string;
   receivingAt?: string;
   completedAt?: string;
   items: BatchPlannedItem[];

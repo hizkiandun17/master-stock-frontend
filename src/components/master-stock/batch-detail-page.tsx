@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronRight, PackagePlus, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useMasterStock } from "@/lib/master-stock-context";
 import { exportProductionBatchPdf } from "@/lib/pdf-export";
 import { getBatchStatusLabel, getBatchTotals, getCategoryName } from "@/lib/stock-helpers";
-import type { BatchPlannedItem, Product } from "@/lib/types";
+import type { BatchPlannedItem, Product, ProductionBatch } from "@/lib/types";
 import { cn, formatDate, formatDateTime, titleCase } from "@/lib/utils";
 
 const longPressDurationMs = 650;
@@ -26,9 +27,13 @@ function getProductionBatchName(name: string | undefined, source: string) {
   return name?.trim() || `${titleCase(source || "")} Production Batch`;
 }
 
-function getStatusClassName(status: "draft" | "submitted" | "receiving" | "completed") {
+function getStatusClassName(status: ProductionBatch["status"]) {
   if (status === "completed") {
     return "bg-white text-black";
+  }
+
+  if (status === "cancelled") {
+    return "border border-danger/30 text-danger";
   }
 
   if (status === "receiving") {
@@ -43,7 +48,7 @@ function getStatusClassName(status: "draft" | "submitted" | "receiving" | "compl
 }
 
 function getRoleStatusLabel(
-  status: "draft" | "submitted" | "receiving" | "completed",
+  status: ProductionBatch["status"],
   role: string,
 ) {
   if (role === "production" && status === "receiving") {
@@ -104,6 +109,7 @@ function getIncomingItemCategoryName(
 }
 
 export function BatchDetailPage({ batchId }: { batchId: string }) {
+  const router = useRouter();
   const {
     batches,
     products,
@@ -112,6 +118,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     updateIncoming,
     submitIncoming,
     cancelIncomingSubmission,
+    createIncomingRevision,
     startReceivingIncoming,
     completeIncoming,
   } = useMasterStock();
@@ -319,6 +326,7 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
   const sourceLabel = titleCase(activeIncoming.source || "") || "-";
   const isReceiving = activeIncoming.status === "receiving";
   const isCompleted = activeIncoming.status === "completed";
+  const isCancelled = activeIncoming.status === "cancelled";
   const canEditItems = isReceiving && !isCompleted;
   const checkedItems = incomingItems.filter((item) => item.checked);
   const checkedCount = checkedItems.length;
@@ -327,7 +335,9 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
     ? `Completed ${formatDateTime(activeIncoming.completedAt)}`
     : activeIncoming.receivingAt
       ? `Receiving started ${formatDateTime(activeIncoming.receivingAt)}`
-      : activeIncoming.submittedAt
+      : activeIncoming.cancelledAt
+        ? `Cancelled ${formatDateTime(activeIncoming.cancelledAt)}`
+        : activeIncoming.submittedAt
         ? `Submitted ${formatDateTime(activeIncoming.submittedAt)}`
         : `Created ${formatDate(activeIncoming.createdAt)}`;
 
@@ -336,6 +346,13 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
       incomingId: activeIncoming.id,
       items: nextItems,
     });
+  }
+
+  function createRevisionAndOpen() {
+    const revision = createIncomingRevision(activeIncoming.id);
+    if (revision) {
+      router.push(`/master-stock/incoming/${revision.id}`);
+    }
   }
 
   function focusIncomingInput(itemId: string) {
@@ -648,6 +665,9 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   <p className="text-sm text-muted-foreground">
                     {getRoleStatusLabel(activeIncoming.status, currentUserRole)} • {itemCount} item
                     {itemCount === 1 ? "" : "s"} • {totalQuantity} pcs
+                    {(activeIncoming.revisionNumber ?? 1) > 1
+                      ? ` • Revision ${activeIncoming.revisionNumber}`
+                      : ""}
                   </p>
                 </div>
                 <span
@@ -660,6 +680,11 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">{currentStageLabel}</p>
+              {(activeIncoming.revisionNumber ?? 1) > 1 ? (
+                <p className="text-xs uppercase tracking-[0.18em] text-info">
+                  Revision {activeIncoming.revisionNumber}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -941,6 +966,8 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   <h2 className="text-lg font-semibold text-foreground">
                     {activeIncoming.status === "submitted"
                       ? "Submitted summary"
+                      : activeIncoming.status === "cancelled"
+                        ? "Cancelled summary"
                       : activeIncoming.status === "receiving"
                         ? "In review"
                         : "Completed summary"}
@@ -948,6 +975,8 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   <p className="text-sm text-muted-foreground">
                     {activeIncoming.status === "submitted"
                       ? "This batch is locked and waiting for internal receiving."
+                      : activeIncoming.status === "cancelled"
+                        ? "This submission is cancelled and locked. Create a revision to edit again."
                       : activeIncoming.status === "receiving"
                         ? "The internal team is reviewing this submission. No actions are available."
                         : "This batch is completed and read-only."}
@@ -984,9 +1013,18 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                   <Button
                     variant="outline"
                     onClick={() => cancelIncomingSubmission(activeIncoming.id)}
-                    className="min-h-12 w-full sm:w-auto"
+                    className="hidden min-h-12 w-full sm:w-auto md:inline-flex"
                   >
                     Cancel Submission
+                  </Button>
+                ) : null}
+
+                {activeIncoming.status === "cancelled" ? (
+                  <Button
+                    onClick={createRevisionAndOpen}
+                    className="hidden min-h-12 w-full sm:w-auto md:inline-flex"
+                  >
+                    Edit Again
                   </Button>
                 ) : null}
               </CardContent>
@@ -1118,6 +1156,17 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
             </Button>
           </div>
         ) : null}
+
+        {activeIncoming.status === "cancelled" ? (
+          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-background/95 px-4 py-3 backdrop-blur md:hidden">
+            <Button
+              onClick={createRevisionAndOpen}
+              className="min-h-12 w-full"
+            >
+              Edit Again
+            </Button>
+          </div>
+        ) : null}
       </MasterStockShell>
     );
   }
@@ -1140,6 +1189,11 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
                 {getProductionBatchName(activeIncoming.name, activeIncoming.source)}
               </h1>
               <p className="text-sm text-muted-foreground">{currentStageLabel}</p>
+              {(activeIncoming.revisionNumber ?? 1) > 1 ? (
+                <p className="text-xs uppercase tracking-[0.18em] text-info">
+                  Revision {activeIncoming.revisionNumber}
+                </p>
+              ) : null}
             </div>
 
             <div className="hidden w-full flex-col gap-2 sm:w-auto sm:flex-row md:flex">
@@ -1205,9 +1259,13 @@ export function BatchDetailPage({ batchId }: { batchId: string }) {
           <Card className="border-white/10">
             <CardContent className="space-y-4 p-4 md:space-y-5 md:p-5">
               <div className="space-y-1.5 md:space-y-2">
-                <h2 className="text-lg font-semibold text-foreground">Submission summary</h2>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {isCancelled ? "Cancelled summary" : "Submission summary"}
+                </h2>
                 <p className="text-sm leading-5 text-muted-foreground">
-                  Review the saved craftsman report first, then click Receive to begin checklist verification.
+                  {isCancelled
+                    ? "This submission was cancelled before receiving and is locked for audit history."
+                    : "Review the saved craftsman report first, then click Receive to begin checklist verification."}
                 </p>
               </div>
 

@@ -93,6 +93,7 @@ interface MasterStockContextValue {
   }) => void;
   submitIncoming: (incomingId: string) => void;
   cancelIncomingSubmission: (incomingId: string) => void;
+  createIncomingRevision: (incomingId: string) => ProductionBatch | null;
   startReceivingIncoming: (incomingId: string) => void;
   completeIncoming: (incomingId: string) => void;
   deleteIncoming: (incomingId: string) => void;
@@ -346,14 +347,28 @@ function normalizeBatches(input: ProductionBatch[]): ProductionBatch[] {
           ? "receiving"
           : batch.status === "submitted"
             ? "submitted"
+            : batch.status === "cancelled"
+              ? "cancelled"
             : "draft",
     notes:
       typeof batch.notes === "string" && batch.notes.trim() ? batch.notes.trim() : undefined,
+    revisionNumber:
+      typeof batch.revisionNumber === "number" && batch.revisionNumber > 0
+        ? Math.floor(batch.revisionNumber)
+        : 1,
+    previousRevisionId:
+      typeof batch.previousRevisionId === "string" && batch.previousRevisionId.trim()
+        ? batch.previousRevisionId
+        : undefined,
     createdAt: typeof batch.createdAt === "string" ? batch.createdAt : defaultLastSyncedAt,
     updatedAt: typeof batch.updatedAt === "string" ? batch.updatedAt : defaultLastSyncedAt,
     createdBy: batch.createdBy,
     submittedAt:
       typeof batch.submittedAt === "string" ? batch.submittedAt : undefined,
+    cancelledAt:
+      batch.status === "cancelled" && typeof batch.cancelledAt === "string"
+        ? batch.cancelledAt
+        : undefined,
     receivingAt:
       typeof (batch as ProductionBatch & { receivingAt?: string }).receivingAt === "string"
         ? (batch as ProductionBatch & { receivingAt?: string }).receivingAt
@@ -1048,6 +1063,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
         name: input.name?.trim() || `Production Batch ${batches.length + 1}`,
         source: input.source,
         status: "draft",
+        revisionNumber: 1,
         notes: input.notes?.trim() || undefined,
         createdAt,
         updatedAt: createdAt,
@@ -1106,7 +1122,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
           if (
             incoming.id !== incomingId ||
             incoming.status === "submitted" ||
-            incoming.status === "completed"
+            incoming.status === "completed" ||
+            incoming.status === "cancelled"
           ) {
             return incoming;
           }
@@ -1258,8 +1275,8 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
           incoming.id === incomingId && incoming.status === "submitted"
             ? {
                 ...incoming,
-                status: "draft",
-                submittedAt: undefined,
+                status: "cancelled",
+                cancelledAt,
                 updatedAt: cancelledAt,
                 history: [
                   ...incoming.history,
@@ -1267,7 +1284,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
                     id: makeId("incoming-history"),
                     kind: "edited",
                     title: "Cancelled production batch submission",
-                    detail: "Returned to draft before internal receiving",
+                    detail: "Locked permanently before internal receiving",
                     actor: titleCase(currentUserRole),
                     createdAt: cancelledAt,
                   }),
@@ -1279,11 +1296,80 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
 
       pushToast({
         title: "Submission cancelled",
-        description: "The batch is back in draft and can be edited again.",
+        description: "This submission is now locked. Create a revision to edit again.",
         variant: "warning",
       });
     },
     [currentUserRole, pushToast],
+  );
+
+  const createIncomingRevision = useCallback(
+    (incomingId: string) => {
+      const source = batches.find((incoming) => incoming.id === incomingId);
+      if (!source || source.status !== "cancelled") {
+        return null;
+      }
+
+      const createdAt = new Date().toISOString();
+      const actorLabel = titleCase(currentUserRole);
+      const revisionNumber = Math.max(1, source.revisionNumber ?? 1) + 1;
+      const copiedItems: BatchPlannedItem[] = source.items.map((item) => ({
+        id: makeId("incoming-item"),
+        productId: item.productId,
+        isCustom: item.isCustom,
+        customName: item.customName,
+        note: item.note,
+        mappedProductId: item.mappedProductId,
+        checked: false,
+        quantity: Math.max(0, item.quantity),
+      }));
+      const revision: ProductionBatch = {
+        ...source,
+        id: makeId("incoming"),
+        name: source.name,
+        status: "draft",
+        revisionNumber,
+        previousRevisionId: source.id,
+        createdAt,
+        updatedAt: createdAt,
+        createdBy: actorLabel,
+        submittedAt: undefined,
+        cancelledAt: undefined,
+        receivingAt: undefined,
+        completedAt: undefined,
+        items: copiedItems,
+        history: [
+          createActivityEntry({
+            id: makeId("incoming-history"),
+            kind: "created",
+            title: `Created revision ${revisionNumber}`,
+            detail: `Copied from cancelled revision ${source.revisionNumber ?? 1}`,
+            actor: actorLabel,
+            createdAt,
+          }),
+          ...copiedItems.map((item) =>
+            createActivityEntry({
+              id: makeId("incoming-history"),
+              kind: "added",
+              title: `Added ${getIncomingItemLabel(item, products)}`,
+              detail: `+${item.quantity} pcs • Source: ${getSourceLabel(source.source)}`,
+              actor: actorLabel,
+              createdAt,
+            }),
+          ),
+        ],
+      };
+
+      setBatches((current) => [revision, ...current]);
+      pushToast({
+        title: "Revision created",
+        description: `Revision ${revisionNumber} is ready to edit and submit.`,
+        variant: "success",
+      });
+
+      return revision;
+    },
+    [batches, currentUserRole, products, pushToast],
   );
 
   const startReceivingIncoming = useCallback(
@@ -1444,6 +1530,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       updateIncoming,
       submitIncoming,
       cancelIncomingSubmission,
+      createIncomingRevision,
       startReceivingIncoming,
       completeIncoming,
       deleteIncoming,
@@ -1461,6 +1548,7 @@ export function MasterStockProvider({ children }: { children: ReactNode }) {
       completeIncoming,
       completeProductionPlan,
       cancelIncomingSubmission,
+      createIncomingRevision,
       deleteIncoming,
       submitIncoming,
       updateIncoming,

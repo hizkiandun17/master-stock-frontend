@@ -1,6 +1,7 @@
 "use client";
 import {
   Archive,
+  Check,
   ChevronDown,
   Clock3,
   Download,
@@ -13,8 +14,16 @@ import {
   PackagePlus,
   PencilLine,
   Trash2,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from "react";
 
 import { CategorySelectField } from "@/components/master-stock/category-select-field";
 import { ManageCategoriesDialog } from "@/components/master-stock/manage-categories-dialog";
@@ -81,6 +90,13 @@ interface EditStockDraft {
 }
 
 type ProductHealthState = "normal" | "low" | "out";
+type BulkMobileAction = "view" | "edit" | "archive" | "delete";
+
+const MOBILE_LONG_PRESS_MS = 380;
+const MOBILE_BULK_PRIMARY_ACTIONS = [
+  { label: "View Details & QR", action: "view", Icon: Eye },
+  { label: "Edit Stock", action: "edit", Icon: PencilLine },
+] as const;
 
 function getProductHealthState(product: Product): ProductHealthState {
   const total = getProductTotal(product);
@@ -96,6 +112,7 @@ function getProductHealthState(product: Product): ProductHealthState {
 interface StockActionMenuProps {
   product: Product;
   open: boolean;
+  isMobile?: boolean;
   onToggle: () => void;
   actionMenuRef?: RefObject<HTMLDivElement | null>;
   onView: () => void;
@@ -287,6 +304,7 @@ function useMobileViewport() {
 function StockActionMenu({
   product,
   open,
+  isMobile = false,
   onToggle,
   actionMenuRef,
   onView,
@@ -295,61 +313,86 @@ function StockActionMenu({
   onArchive,
   onHistory,
 }: StockActionMenuProps) {
+  const menuContent = (
+    <>
+      <p className="px-3 py-2 text-sm font-medium text-foreground">Actions</p>
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+        onClick={onView}
+      >
+        <Eye className="h-4 w-4 text-muted-foreground" />
+        View Details &amp; QR
+      </button>
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+        onClick={onEdit}
+      >
+        <PencilLine className="h-4 w-4 text-muted-foreground" />
+        Edit Stock
+      </button>
+      <div className="my-2 border-t border-border/80" />
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-danger transition-colors hover:bg-danger/10"
+        onClick={onDelete}
+      >
+        <Trash2 className="h-4 w-4" />
+        Delete
+      </button>
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+        onClick={onArchive}
+      >
+        <Archive className="h-4 w-4 text-muted-foreground" />
+        Archive Stock
+      </button>
+      <button
+        type="button"
+        className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
+        onClick={onHistory}
+      >
+        <History className="h-4 w-4 text-muted-foreground" />
+        View History
+      </button>
+    </>
+  );
+
   return (
     <div ref={open ? actionMenuRef : null} className="relative flex justify-end">
       <button
         type="button"
         aria-label={`Open actions for ${product.name}`}
-        className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className={cn(
+          "flex min-h-11 min-w-11 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+          isMobile
+            ? "rounded-full border border-white/10 bg-white/[0.03]"
+            : "rounded-xl",
+        )}
         onClick={onToggle}
       >
         <MoreHorizontal className="h-5 w-5" />
       </button>
 
-      {open ? (
+      {open && isMobile ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close actions"
+            className="fixed inset-0 z-40 bg-black/55"
+            onClick={onToggle}
+          />
+          <div className="fixed inset-x-4 bottom-4 z-50 rounded-[24px] border border-white/10 bg-[#0b0b0f] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+            {menuContent}
+          </div>
+        </>
+      ) : null}
+
+      {open && !isMobile ? (
         <div className="absolute right-0 top-12 z-30 w-56 rounded-2xl border border-white/10 bg-[#0b0b0f] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
-          <p className="px-3 py-2 text-sm font-medium text-foreground">Actions</p>
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
-            onClick={onView}
-          >
-            <Eye className="h-4 w-4 text-muted-foreground" />
-            View Details &amp; QR
-          </button>
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
-            onClick={onEdit}
-          >
-            <PencilLine className="h-4 w-4 text-muted-foreground" />
-            Edit Stock
-          </button>
-          <div className="my-2 border-t border-border/80" />
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-danger transition-colors hover:bg-danger/10"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
-            onClick={onArchive}
-          >
-            <Archive className="h-4 w-4 text-muted-foreground" />
-            Archive Stock
-          </button>
-          <button
-            type="button"
-            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-foreground transition-colors hover:bg-accent"
-            onClick={onHistory}
-          >
-            <History className="h-4 w-4 text-muted-foreground" />
-            View History
-          </button>
+          {menuContent}
         </div>
       ) : null}
     </div>
@@ -383,6 +426,12 @@ export function OverviewPage() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
   const actionMenuRef = useRef<HTMLDivElement | null>(null);
+  const [selectedMobileProductIds, setSelectedMobileProductIds] = useState<string[]>([]);
+  const [isBulkActionSheetOpen, setIsBulkActionSheetOpen] = useState(false);
+  const mobileLongPressTimerRef = useRef<number | null>(null);
+  const mobilePointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mobilePointerMovedRef = useRef(false);
+  const ignoreNextMobileCardClickRef = useRef(false);
   const [selectedEditProduct, setSelectedEditProduct] = useState<Product | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editStockDraft, setEditStockDraft] = useState<EditStockDraft>({
@@ -531,6 +580,12 @@ export function OverviewPage() {
     const start = (page - 1) * preferences.rowsPerPage;
     return filteredProducts.slice(start, start + preferences.rowsPerPage);
   }, [filteredProducts, page, preferences.rowsPerPage]);
+  const selectedMobileProducts = useMemo(
+    () => products.filter((product) => selectedMobileProductIds.includes(product.id)),
+    [products, selectedMobileProductIds],
+  );
+  const isMobileSelectionMode =
+    isMobileViewport && selectedMobileProductIds.length > 0;
 
   const freshnessMinutes = Math.round(
     (Date.now() - new Date(lastSyncedAt).getTime()) / 60000,
@@ -554,6 +609,152 @@ export function OverviewPage() {
     event.stopPropagation();
   }
 
+  function clearMobileLongPressTimer() {
+    if (mobileLongPressTimerRef.current) {
+      window.clearTimeout(mobileLongPressTimerRef.current);
+      mobileLongPressTimerRef.current = null;
+    }
+  }
+
+  function resetMobileGestureState() {
+    clearMobileLongPressTimer();
+    mobilePointerStartRef.current = null;
+    mobilePointerMovedRef.current = false;
+    ignoreNextMobileCardClickRef.current = false;
+  }
+
+  function releasePageScrollLock() {
+    if (typeof document === "undefined") return;
+    document.body.style.overflow = "";
+    document.body.style.paddingRight = "";
+    document.documentElement.style.overflow = "";
+  }
+
+  function clearMobileSelection() {
+    resetMobileGestureState();
+    releasePageScrollLock();
+    window.requestAnimationFrame(() => {
+      releasePageScrollLock();
+    });
+    setSelectedMobileProductIds([]);
+    setIsBulkActionSheetOpen(false);
+  }
+
+  function toggleMobileProductSelection(productId: string) {
+    setSelectedMobileProductIds((current) =>
+      current.includes(productId)
+        ? current.filter((id) => id !== productId)
+        : [...current, productId],
+    );
+  }
+
+  function startMobileSelection(productId: string) {
+    setOpenActionMenuId(null);
+    setIsBulkActionSheetOpen(false);
+    setSelectedMobileProductIds((current) =>
+      current.includes(productId) ? current : [...current, productId],
+    );
+  }
+
+  function handleMobileCardPointerDown(
+    event: ReactPointerEvent<HTMLDivElement>,
+    productId: string,
+  ) {
+    if (!isMobileViewport) return;
+
+    mobilePointerStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+    mobilePointerMovedRef.current = false;
+
+    if (isMobileSelectionMode) return;
+
+    clearMobileLongPressTimer();
+    mobileLongPressTimerRef.current = window.setTimeout(() => {
+      ignoreNextMobileCardClickRef.current = true;
+      startMobileSelection(productId);
+      mobileLongPressTimerRef.current = null;
+    }, MOBILE_LONG_PRESS_MS);
+  }
+
+  function handleMobileCardPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!mobilePointerStartRef.current) return;
+
+    const hasUnreliableCoordinates = event.clientX === 0 && event.clientY === 0;
+    const deltaX = Math.abs(event.clientX - mobilePointerStartRef.current.x);
+    const deltaY = Math.abs(event.clientY - mobilePointerStartRef.current.y);
+
+    if (hasUnreliableCoordinates || deltaX > 8 || deltaY > 8) {
+      mobilePointerMovedRef.current = true;
+      clearMobileLongPressTimer();
+    }
+  }
+
+  function handleMobileCardPointerEnd() {
+    clearMobileLongPressTimer();
+    mobilePointerStartRef.current = null;
+  }
+
+  function handleMobileCardClick(product: Product) {
+    if (!isMobileViewport) {
+      setSelectedProduct(product);
+      return;
+    }
+
+    if (ignoreNextMobileCardClickRef.current) {
+      ignoreNextMobileCardClickRef.current = false;
+      return;
+    }
+
+    if (mobilePointerMovedRef.current) {
+      mobilePointerMovedRef.current = false;
+      return;
+    }
+
+    setOpenActionMenuId(null);
+
+    if (isMobileSelectionMode) {
+      toggleMobileProductSelection(product.id);
+      return;
+    }
+
+    setSelectedProduct(product);
+  }
+
+  function handleBulkMobileAction(action: BulkMobileAction) {
+    const selectedIds = [...selectedMobileProductIds];
+    const selectedProductForSingleAction = selectedMobileProducts[0];
+
+    if (action === "view" && selectedMobileProductIds.length === 1 && selectedProductForSingleAction) {
+      clearMobileSelection();
+      setSelectedProduct(selectedProductForSingleAction);
+      return;
+    }
+
+    if (action === "edit" && selectedMobileProductIds.length === 1 && selectedProductForSingleAction) {
+      clearMobileSelection();
+      setSelectedEditProduct(selectedProductForSingleAction);
+      setIsEditModalOpen(true);
+      return;
+    }
+
+    if (action === "archive") {
+      selectedIds.forEach((productId) => archiveProduct(productId));
+      clearMobileSelection();
+      return;
+    }
+
+    if (action === "delete") {
+      selectedIds.forEach((productId) => console.info("Bulk delete placeholder", productId));
+      clearMobileSelection();
+      return;
+    }
+
+    console.info("Bulk stock action placeholder", action, selectedIds);
+    setIsBulkActionSheetOpen(false);
+  }
+
   useEffect(() => {
     if (!openActionMenuId) return;
 
@@ -569,6 +770,24 @@ export function OverviewPage() {
     window.addEventListener("mousedown", onPointerDown);
     return () => window.removeEventListener("mousedown", onPointerDown);
   }, [openActionMenuId]);
+
+  useEffect(() => {
+    if (!isMobileViewport) {
+      clearMobileSelection();
+    }
+  }, [isMobileViewport]);
+
+  useEffect(() => {
+    if (selectedMobileProductIds.length === 0) {
+      setIsBulkActionSheetOpen(false);
+    }
+  }, [selectedMobileProductIds.length]);
+
+  useEffect(() => {
+    return () => {
+      clearMobileLongPressTimer();
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedEditProduct) return;
@@ -987,7 +1206,12 @@ export function OverviewPage() {
             </div>
 
             {isMobileViewport ? (
-              <div className="space-y-3 px-4 pb-1 md:hidden">
+              <div
+                className={cn(
+                  "space-y-3 px-4 pb-1 md:hidden",
+                  isMobileSelectionMode && "pb-28",
+                )}
+              >
                 {paginatedProducts.length === 0 ? (
                   <div className="rounded-[20px] border border-border/70 bg-card px-4 py-12 text-center text-sm text-muted-foreground">
                     No products match this filter.
@@ -1001,23 +1225,54 @@ export function OverviewPage() {
                       <div
                         key={product.id}
                         className={cn(
-                          "rounded-[18px] border bg-card px-4 py-3.5 transition-colors active:bg-white/[0.04]",
+                          "touch-pan-y rounded-[18px] border bg-card px-4 py-3.5 transition-colors active:bg-white/[0.04]",
+                          isMobileSelectionMode && "ring-1 ring-white/10",
+                          isMobileSelectionMode &&
+                            selectedMobileProductIds.includes(product.id) &&
+                            "border-white/25 bg-white/[0.04]",
                           healthState === "out" && "border-danger/30 bg-danger/[0.03]",
                           healthState === "low" && "border-warning/30 bg-warning/[0.03]",
                           healthState === "normal" && "border-white/10",
                         )}
-                        onClick={() => setSelectedProduct(product)}
+                        onPointerDown={(event) => handleMobileCardPointerDown(event, product.id)}
+                        onPointerMove={handleMobileCardPointerMove}
+                        onPointerUp={handleMobileCardPointerEnd}
+                        onPointerLeave={handleMobileCardPointerEnd}
+                        onPointerCancel={handleMobileCardPointerEnd}
+                        onClick={() => handleMobileCardClick(product)}
                         role="button"
                         tabIndex={0}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            setSelectedProduct(product);
+                            handleMobileCardClick(product);
                           }
                         }}
                       >
                         <div className="flex min-h-[56px] items-center justify-between gap-4">
                           <div className="flex min-w-0 flex-1 items-center gap-3">
+                            {isMobileSelectionMode ? (
+                              <button
+                                type="button"
+                                aria-label={
+                                  selectedMobileProductIds.includes(product.id)
+                                    ? `Unselect ${product.name}`
+                                    : `Select ${product.name}`
+                                }
+                                className={cn(
+                                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors",
+                                  selectedMobileProductIds.includes(product.id)
+                                    ? "border-white bg-white text-black"
+                                    : "border-white/20 bg-white/[0.02] text-transparent",
+                                )}
+                                onClick={(event) => {
+                                  stopRowClick(event);
+                                  toggleMobileProductSelection(product.id);
+                                }}
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                            ) : null}
                             <div
                               className={cn(
                                 "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-white text-xs font-semibold text-black",
@@ -1049,7 +1304,7 @@ export function OverviewPage() {
                               </p>
                             </div>
                           </div>
-                          <div className="flex min-w-[52px] shrink-0 flex-col items-end justify-center text-right">
+                          <div className="flex min-w-[64px] shrink-0 flex-col items-end justify-center gap-2 text-right">
                             <p
                               className={cn(
                                 "text-lg font-semibold leading-none tracking-tight text-foreground",
@@ -1236,6 +1491,99 @@ export function OverviewPage() {
           </CardContent>
         </Card>
       </section>
+
+      {isMobileSelectionMode ? (
+        <>
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4 md:hidden">
+            <div className="pointer-events-auto mx-auto flex max-w-sm items-center justify-between rounded-[24px] border border-white/10 bg-[#101012] px-3 py-3 shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  aria-label="Clear selection"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-foreground transition-colors hover:bg-white/[0.08]"
+                  onClick={clearMobileSelection}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <p className="text-sm font-medium text-foreground">
+                  {selectedMobileProductIds.length} selected
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label="Open bulk actions"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-foreground transition-colors hover:bg-white/[0.08]"
+                  onClick={() => setIsBulkActionSheetOpen(true)}
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {isBulkActionSheetOpen ? (
+            <>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none fixed inset-0 z-40 bg-black/45 md:hidden"
+              />
+              <div className="fixed inset-x-4 bottom-[5.75rem] z-50 rounded-[28px] border border-white/10 bg-[#0b0b0f] px-5 pb-3 pt-4 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:hidden">
+                <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-white/10" />
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-3 pb-2">
+                    <p className="text-lg font-semibold text-foreground">Actions</p>
+                    <button
+                      type="button"
+                      aria-label="Close bulk actions"
+                      className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-muted-foreground transition-colors hover:bg-white/[0.08] hover:text-foreground"
+                      onClick={() => setIsBulkActionSheetOpen(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {MOBILE_BULK_PRIMARY_ACTIONS.map(({ label, action, Icon: ActionIcon }) => {
+                    const disabled = selectedMobileProductIds.length !== 1;
+
+                    return (
+                    <button
+                      key={action}
+                      type="button"
+                      disabled={disabled}
+                      className={cn(
+                        "flex min-h-12 w-full items-center gap-3 rounded-2xl px-1 py-3 text-left text-base text-foreground transition-colors hover:bg-white/[0.04]",
+                        disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
+                      )}
+                      onClick={() => handleBulkMobileAction(action as BulkMobileAction)}
+                    >
+                      <ActionIcon className="h-4 w-4 text-muted-foreground" />
+                      {label}
+                    </button>
+                    );
+                  })}
+                  <div className="my-2 border-t border-white/10" />
+                  <button
+                    type="button"
+                    className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-1 py-3 text-left text-base text-danger transition-colors hover:bg-danger/10"
+                    onClick={() => handleBulkMobileAction("delete")}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                  <button
+                    type="button"
+                    className="flex min-h-12 w-full items-center gap-3 rounded-2xl px-1 py-3 text-left text-base text-foreground transition-colors hover:bg-white/[0.04]"
+                    onClick={() => handleBulkMobileAction("archive")}
+                  >
+                    <Archive className="h-4 w-4 text-muted-foreground" />
+                    Archive Stock
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </>
+      ) : null}
 
       <Dialog
         open={Boolean(selectedProduct)}

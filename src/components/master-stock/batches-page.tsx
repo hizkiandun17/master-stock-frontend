@@ -22,6 +22,10 @@ function getStatusClassName(status: ProductionBatch["status"]) {
     return "bg-white text-black";
   }
 
+  if (status === "cancelled") {
+    return "border border-danger/30 text-danger";
+  }
+
   if (status === "receiving") {
     return "border border-success/30 text-success";
   }
@@ -131,6 +135,11 @@ export function BatchesPage() {
                           <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
                             {sourceLabel}
                           </p>
+                          {(batch.revisionNumber ?? 1) > 1 ? (
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-info">
+                              Revision {batch.revisionNumber}
+                            </p>
+                          ) : null}
                         </div>
 
                         <div className="flex items-center gap-2">
